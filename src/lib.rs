@@ -291,6 +291,7 @@ impl CharacterController {
 /// Usually, this is populated by the camera.
 #[derive(Component, Clone, Reflect, Debug, Default)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
 pub struct CharacterLook {
     /// The yaw the character is looking at (relative to the world).
