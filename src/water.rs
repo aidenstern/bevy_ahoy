@@ -11,7 +11,7 @@ impl Plugin for AhoyWaterPlugin {
     }
 }
 
-#[derive(Component, Default, Copy, Reflect, Clone, Debug)]
+#[derive(Component, Default, Copy, Reflect, PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]

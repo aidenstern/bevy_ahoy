@@ -90,7 +90,7 @@ pub struct DropObject;
 pub struct ThrowObject;
 
 /// Input accumulated since the last fixed update loop. Is cleared after every fixed update loop.
-#[derive(Component, Clone, Reflect, Default, Debug)]
+#[derive(Component, Clone, Reflect, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]

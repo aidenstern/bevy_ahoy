@@ -135,7 +135,7 @@ pub enum AhoySystems {
     ApplyForcesToDynamicRigidBodies,
 }
 
-#[derive(Component, Clone, Reflect, Debug)]
+#[derive(Component, Clone, Reflect, PartialEq, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
@@ -289,7 +289,7 @@ impl CharacterController {
 /// The look direction for the character.
 ///
 /// Usually, this is populated by the camera.
-#[derive(Component, Clone, Reflect, Debug, Default)]
+#[derive(Component, Clone, Reflect, PartialEq, Debug, Default)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
@@ -380,7 +380,7 @@ fn setup_collider(
     derived.hand_collider = Collider::from(cfg.min_ledge_grab_space);
 }
 
-#[derive(Component, Clone, Reflect, Debug)]
+#[derive(Component, Clone, Reflect, PartialEq, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
@@ -426,7 +426,7 @@ impl Default for CharacterControllerState {
 }
 
 /// The state of a mantle in progress.
-#[derive(Clone, Reflect, Debug)]
+#[derive(Clone, Reflect, PartialEq, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 pub struct MantleState {
     pub height_left: f32,
