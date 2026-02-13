@@ -91,6 +91,8 @@ pub struct ThrowObject;
 
 /// Input accumulated since the last fixed update loop. Is cleared after every fixed update loop.
 #[derive(Component, Clone, Reflect, Default, Debug)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
 pub struct AccumulatedInput {
     // The last non-zero move that was input since the last fixed update loop

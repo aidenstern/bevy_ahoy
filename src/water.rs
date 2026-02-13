@@ -12,6 +12,8 @@ impl Plugin for AhoyWaterPlugin {
 }
 
 #[derive(Component, Default, Copy, Reflect, Clone, Debug)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 #[reflect(Component)]
 pub struct WaterState {
     pub level: WaterLevel,
@@ -19,6 +21,8 @@ pub struct WaterState {
 }
 
 #[derive(Default, Copy, Reflect, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 pub enum WaterLevel {
     #[default]
     None,
