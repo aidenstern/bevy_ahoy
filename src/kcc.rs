@@ -7,7 +7,7 @@ use bevy_ecs::{
 };
 use core::fmt::Debug;
 use core::time::Duration;
-use tracing::warn;
+use tracing::{error, warn};
 
 use crate::{
     CharacterControllerDerivedProps, CharacterControllerOutput, CharacterControllerState,
@@ -28,6 +28,7 @@ impl Plugin for AhoyKccPlugin {
 #[derive(QueryData)]
 #[query_data(mutable, derive(Debug))]
 struct Ctx {
+    entity: Entity,
     velocity: Write<LinearVelocity>,
     state: Write<CharacterControllerState>,
     derived: Read<CharacterControllerDerivedProps>,
@@ -39,19 +40,26 @@ struct Ctx {
     cfg: Read<CharacterController>,
     water: Read<WaterState>,
     look: Option<Read<CharacterLook>>,
+    colliders: Read<RigidBodyColliders>,
 }
 
 impl CtxItem<'_, '_> {
-    fn global_transform(&self) -> GlobalTransform {
-        GlobalTransform::from(Transform {
-            translation: **self.position,
-            rotation: **self.rotation,
-            scale: Vec3::ONE,
-        })
+    fn global_transform(&self, collider_transform: Transform) -> GlobalTransform {
+        GlobalTransform::from(
+            Transform {
+                translation: **self.position,
+                rotation: **self.rotation,
+                scale: Vec3::ONE,
+            }
+            .compute_affine()
+                * collider_transform.compute_affine(),
+        )
     }
 
-    fn update_global_transform(&mut self, transform: Transform) {
-        let parent = self.global_transform().affine()
+    fn update_global_transform(&mut self, transform: Transform, collider_transform: Transform) {
+        let rb_transform =
+            transform.compute_affine() * collider_transform.compute_affine().inverse();
+        let parent = self.global_transform(Transform::IDENTITY).affine()
             * GlobalTransform::from(*self.transform).affine().inverse();
         let (scale, rotation, translation) = parent.to_scale_rotation_translation();
         let parent = GlobalTransform::from(Transform {
@@ -59,7 +67,7 @@ impl CtxItem<'_, '_> {
             rotation,
             translation,
         });
-        let local_transform = GlobalTransform::from(transform).reparented_to(&parent);
+        let local_transform = GlobalTransform::from(rb_transform).reparented_to(&parent);
         *self.transform = local_transform;
     }
 }
@@ -88,6 +96,7 @@ fn run_kcc(
     move_and_slide: MoveAndSlide,
     // TODO: allow this to be other KCCs
     colliders: Query<ColliderComponents, (Without<CharacterController>, Without<Sensor>)>,
+    transforms: Query<&Transform, Without<CharacterController>>,
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
@@ -97,7 +106,16 @@ fn run_kcc(
     let mut waters = waters.transmute_lens_inner();
     let waters = waters.query();
     for mut ctx in &mut kccs {
-        let mut transform = ctx.global_transform().compute_transform();
+        let Some(collider) = ctx.colliders.iter().next() else {
+            error!("Cannot update KCC without a collider");
+            continue;
+        };
+        let collider_transform = if ctx.entity == collider {
+            Transform::IDENTITY
+        } else {
+            transforms.get(collider).copied().unwrap_or_default()
+        };
+        let mut transform = ctx.global_transform(collider_transform).compute_transform();
 
         ctx.output.mantle = None;
         ctx.output.touching_entities.clear();
@@ -233,7 +251,7 @@ fn run_kcc(
             ctx.state.last_ground.reset();
         }
         // TODO: check_falling();
-        ctx.update_global_transform(transform);
+        ctx.update_global_transform(transform, collider_transform);
     }
 }
 

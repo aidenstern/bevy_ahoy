@@ -54,6 +54,7 @@ use bevy_ecs::{
 use bevy_time::Stopwatch;
 use core::time::Duration;
 use std::sync::Arc;
+use tracing::warn;
 
 pub mod camera;
 mod dynamics;
@@ -270,7 +271,7 @@ impl Default for CharacterController {
 
 impl CharacterController {
     pub fn on_add(mut world: DeferredWorld, ctx: HookContext) {
-        let has_collider = world.entity(ctx.entity).contains::<Collider>();
+        let has_collider = world.entity(ctx.entity).contains::<RigidBodyColliders>();
 
         if has_collider {
             let entity = ctx.entity;
@@ -329,7 +330,7 @@ impl CharacterLook {
     }
 }
 
-fn on_insert_collider(trigger: On<Insert, Collider>, mut commands: Commands) {
+fn on_insert_collider(trigger: On<Insert, RigidBodyColliders>, mut commands: Commands) {
     commands.run_system_cached_with(setup_collider, trigger.entity);
 }
 
@@ -338,13 +339,21 @@ fn setup_collider(
     mut kcc: Query<(
         &mut CharacterController,
         &mut CharacterControllerDerivedProps,
-        &Collider,
+        &RigidBodyColliders,
     )>,
+    colliders: Query<&Collider>,
 ) {
     let Ok((mut cfg, mut derived, collider)) = kcc.get_mut(entity) else {
         return;
     };
     cfg.filter.excluded_entities.add(entity);
+    let mut colliders = colliders.iter_many(collider);
+    let collider = colliders.next().expect("A relationship cannot be empty");
+    if colliders.next().is_some() {
+        warn!(
+            "A CharacterController is expected to only have one collider, but found more. Picking the first one. This will probably be an arbitrary collider you didn't expect."
+        );
+    }
 
     let standing_aabb = collider.aabb(default(), Rotation::default());
     let standing_height = standing_aabb.max.y - standing_aabb.min.y;
