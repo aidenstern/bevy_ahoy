@@ -441,7 +441,7 @@ impl Npc {
             (
                 Action::<GlobalMovement>::new(),
                 ActionMock {
-                    state: ActionState::Fired,
+                    state: TriggerState::Fired,
                     value: Vec3::ZERO.into(),
                     span: Duration::from_secs(2).into(),
                     enabled: false
@@ -450,7 +450,7 @@ impl Npc {
             (
                 Action::<Jump>::new(),
                 ActionMock {
-                    state: ActionState::Fired,
+                    state: TriggerState::Fired,
                     value: true.into(),
                     span: Duration::from_secs(2).into(),
                     enabled: false
@@ -496,11 +496,11 @@ fn update_npc(mut commands: Commands, time: Res<Time>, mut npcs: Query<(Entity, 
         };
         commands
             .entity(entity)
-            .mock_once::<Npc, GlobalMovement>(ActionState::Fired, move_vec);
+            .mock_once::<Npc, GlobalMovement>(TriggerState::Fired, move_vec);
         if jump {
             commands
                 .entity(entity)
-                .mock_once::<Npc, Jump>(ActionState::Fired, true);
+                .mock_once::<Npc, Jump>(TriggerState::Fired, true);
         }
     }
 }
