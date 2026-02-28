@@ -54,7 +54,7 @@ use bevy_ecs::{
 use bevy_time::Stopwatch;
 use core::time::Duration;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{error, warn};
 
 pub mod camera;
 mod dynamics;
@@ -343,17 +343,21 @@ fn setup_collider(
     )>,
     colliders: Query<&Collider>,
 ) {
-    let Ok((mut cfg, mut derived, collider)) = kcc.get_mut(entity) else {
+    let Ok((mut cfg, mut derived, collider_entities)) = kcc.get_mut(entity) else {
         return;
     };
-    cfg.filter.excluded_entities.add(entity);
-    let mut colliders = colliders.iter_many(collider);
-    let collider = colliders.next().expect("A relationship cannot be empty");
-    if colliders.next().is_some() {
+    if collider_entities.len() > 1 {
         warn!(
             "A CharacterController is expected to only have one collider, but found more. Picking the first one. This will probably be an arbitrary collider you didn't expect."
         );
     }
+    // Relationships are guaranteed to not be empty
+    let collider_entity = collider_entities[0];
+    let Ok(collider) = colliders.get(collider_entity) else {
+        error!("Failed to set up collider for KCC: failed to query collider. Is it `Disabled`?");
+        return;
+    };
+    cfg.filter.excluded_entities.add(collider_entity);
 
     let standing_aabb = collider.aabb(default(), Rotation::default());
     let standing_height = standing_aabb.max.y - standing_aabb.min.y;

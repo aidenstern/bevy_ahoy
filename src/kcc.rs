@@ -114,7 +114,6 @@ fn run_kcc(
     move_and_slide: MoveAndSlide,
     // TODO: allow this to be other KCCs
     colliders: Query<ColliderComponents, (Without<CharacterController>, Without<Sensor>)>,
-    transforms: Query<&Transform, Without<CharacterController>>,
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
@@ -129,7 +128,6 @@ fn run_kcc(
             error!("Cannot update KCC: The collider is in a corrupt state. Skipping.");
             continue;
         };
-        dbg!(transform.translation);
 
         ctx.output.mantle = None;
         ctx.output.touching_entities.clear();
