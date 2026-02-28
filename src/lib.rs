@@ -42,19 +42,11 @@ pub use avian_pickup::{
         AvianPickupActorThrowConfig as PickupThrowConfig,
     },
 };
-use avian3d::{
-    character_controller::move_and_slide::MoveHitData,
-    parry::shape::{Capsule, SharedShape},
-};
+use avian3d::character_controller::move_and_slide::MoveHitData;
 use bevy_app::PluginGroupBuilder;
-use bevy_ecs::{
-    intern::Interned, lifecycle::HookContext, relationship::RelationshipSourceCollection as _,
-    schedule::ScheduleLabel, world::DeferredWorld,
-};
+use bevy_ecs::{intern::Interned, schedule::ScheduleLabel};
 use bevy_time::Stopwatch;
 use core::time::Duration;
-use std::sync::Arc;
-use tracing::warn;
 
 pub mod camera;
 mod dynamics;
@@ -153,7 +145,6 @@ pub enum AhoySystems {
     SpeculativeMargin::ZERO,
     CollidingEntities,
 )]
-#[component(on_add=CharacterController::on_add)]
 pub struct CharacterController {
     pub crouch_height: f32,
     pub filter: SpatialQueryFilter,
@@ -269,24 +260,6 @@ impl Default for CharacterController {
     }
 }
 
-impl CharacterController {
-    pub fn on_add(mut world: DeferredWorld, ctx: HookContext) {
-        let has_collider = world.entity(ctx.entity).contains::<RigidBodyColliders>();
-
-        if has_collider {
-            let entity = ctx.entity;
-            world.commands().queue(move |world: &mut World| {
-                world.run_system_cached_with(setup_collider, entity)
-            });
-        } else {
-            world
-                .commands()
-                .entity(ctx.entity)
-                .observe(on_insert_collider);
-        }
-    }
-}
-
 /// The look direction for the character.
 ///
 /// Usually, this is populated by the camera.
@@ -328,65 +301,6 @@ impl CharacterLook {
     pub fn to_quat(&self) -> Quat {
         Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, 0.0)
     }
-}
-
-fn on_insert_collider(trigger: On<Insert, RigidBodyColliders>, mut commands: Commands) {
-    commands.run_system_cached_with(setup_collider, trigger.entity);
-}
-
-fn setup_collider(
-    In(entity): In<Entity>,
-    mut kcc: Query<(
-        &mut CharacterController,
-        &mut CharacterControllerDerivedProps,
-        &RigidBodyColliders,
-    )>,
-    colliders: Query<&Collider>,
-) {
-    let Ok((mut cfg, mut derived, collider)) = kcc.get_mut(entity) else {
-        return;
-    };
-    cfg.filter.excluded_entities.add(entity);
-    let mut colliders = colliders.iter_many(collider);
-    let collider = colliders.next().expect("A relationship cannot be empty");
-    if colliders.next().is_some() {
-        warn!(
-            "A CharacterController is expected to only have one collider, but found more. Picking the first one. This will probably be an arbitrary collider you didn't expect."
-        );
-    }
-
-    let standing_aabb = collider.aabb(default(), Rotation::default());
-    let standing_height = standing_aabb.max.y - standing_aabb.min.y;
-
-    derived.standing_collider = collider.clone();
-
-    let frac = cfg.crouch_height / standing_height;
-
-    let mut crouching_collider = Collider::from(SharedShape(Arc::from(
-        derived.standing_collider.shape().clone_dyn(),
-    )));
-
-    if crouching_collider.shape().as_capsule().is_some() {
-        let capsule = crouching_collider
-            .shape_mut()
-            .make_mut()
-            .as_capsule_mut()
-            .unwrap();
-        let radius = capsule.radius;
-        let new_height = (cfg.crouch_height - radius).max(0.0);
-        *capsule = Capsule::new_y(new_height / 2.0, radius);
-    } else {
-        // note: well-behaved shapes like cylinders and cuboids will not actually subdivide when scaled, yay
-        crouching_collider.set_scale(vec3(1.0, frac, 1.0), 16);
-    }
-
-    derived.crouching_collider = Collider::compound(vec![(
-        Vec3::Y * (cfg.crouch_height - standing_height) / 2.0,
-        Rotation::default(),
-        crouching_collider,
-    )]);
-
-    derived.hand_collider = Collider::from(cfg.min_ledge_grab_space);
 }
 
 #[derive(Component, Clone, Reflect, PartialEq, Debug)]

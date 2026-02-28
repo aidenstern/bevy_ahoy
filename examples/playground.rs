@@ -74,7 +74,7 @@ fn main() -> AppExit {
         // NPC Stuff
         .add_input_context::<Npc>()
         .add_systems(Startup, spawn_npc)
-        .add_systems(Update, update_npc)
+        .add_systems(FixedUpdate, update_npc)
         .run()
 }
 

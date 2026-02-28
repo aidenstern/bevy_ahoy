@@ -96,6 +96,7 @@ pub(crate) fn sync_camera_transform(
     // TODO: DIY TransformHelper to use current global transform.
     // Can't use GlobalTransform directly: outdated -> jitter
     // Can't use TransformHelper directly: access conflict with &mut Transform
+    // Can't use Position: that is not interpolated -> jitter
     for (mut camera_transform, camera) in cameras.iter_mut() {
         if let Ok((kcc_transform, cfg, state, derived)) = kccs.get(camera.character_controller) {
             let height = derived

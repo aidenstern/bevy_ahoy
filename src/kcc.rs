@@ -1,12 +1,17 @@
-use avian3d::character_controller::move_and_slide::MoveHitData;
+use avian3d::{
+    character_controller::move_and_slide::MoveHitData,
+    parry::shape::{Capsule, SharedShape},
+};
 use bevy_ecs::{
     intern::Interned,
     query::QueryData,
+    relationship::RelationshipSourceCollection,
     schedule::ScheduleLabel,
     system::lifetimeless::{Read, Write},
 };
 use core::fmt::Debug;
 use core::time::Duration;
+use std::sync::Arc;
 use tracing::{error, warn};
 
 use crate::{
@@ -21,7 +26,76 @@ pub struct AhoyKccPlugin {
 impl Plugin for AhoyKccPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(self.schedule, run_kcc.in_set(AhoySystems::MoveCharacters))
-            .add_systems(Update, (spin_character_look,));
+            .add_systems(Update, (spin_character_look,))
+            .add_systems(PreUpdate, setup_collider);
+    }
+}
+
+#[derive(Component, Debug)]
+struct CharacterControllerDone;
+
+fn setup_collider(
+    mut commands: Commands,
+    mut kccs: Query<
+        (
+            Entity,
+            &mut CharacterController,
+            &mut CharacterControllerDerivedProps,
+            &RigidBodyColliders,
+        ),
+        Without<CharacterControllerDone>,
+    >,
+    colliders: Query<&Collider>,
+) {
+    for (entity, mut cfg, mut derived, collider_entities) in kccs.iter_mut() {
+        if collider_entities.len() > 1 {
+            warn!(
+                "A CharacterController is expected to only have one collider, but found more. Picking the first one. This will probably be an arbitrary collider you didn't expect."
+            );
+        }
+        // Relationships are guaranteed to not be empty
+        let collider_entity = collider_entities[0];
+        let Ok(collider) = colliders.get(collider_entity) else {
+            error!(
+                "Failed to set up collider for KCC: failed to query collider. Is it `Disabled`?"
+            );
+            return;
+        };
+        cfg.filter.excluded_entities.add(collider_entity);
+
+        let standing_aabb = collider.aabb(default(), Rotation::default());
+        let standing_height = standing_aabb.max.y - standing_aabb.min.y;
+
+        derived.standing_collider = collider.clone();
+
+        let frac = cfg.crouch_height / standing_height;
+
+        let mut crouching_collider = Collider::from(SharedShape(Arc::from(
+            derived.standing_collider.shape().clone_dyn(),
+        )));
+
+        if crouching_collider.shape().as_capsule().is_some() {
+            let capsule = crouching_collider
+                .shape_mut()
+                .make_mut()
+                .as_capsule_mut()
+                .unwrap();
+            let radius = capsule.radius;
+            let new_height = (cfg.crouch_height - radius).max(0.0);
+            *capsule = Capsule::new_y(new_height / 2.0, radius);
+        } else {
+            // note: well-behaved shapes like cylinders and cuboids will not actually subdivide when scaled, yay
+            crouching_collider.set_scale(vec3(1.0, frac, 1.0), 16);
+        }
+
+        derived.crouching_collider = Collider::compound(vec![(
+            Vec3::Y * (cfg.crouch_height - standing_height) / 2.0,
+            Rotation::default(),
+            crouching_collider,
+        )]);
+
+        derived.hand_collider = Collider::from(cfg.min_ledge_grab_space);
+        commands.entity(entity).insert(CharacterControllerDone);
     }
 }
 
@@ -44,31 +118,49 @@ struct Ctx {
 }
 
 impl CtxItem<'_, '_> {
-    fn global_transform(&self, collider_transform: Transform) -> GlobalTransform {
-        GlobalTransform::from(
-            Transform {
-                translation: **self.position,
-                rotation: **self.rotation,
-                scale: Vec3::ONE,
-            }
-            .compute_affine()
-                * collider_transform.compute_affine(),
-        )
+    fn collider_global_transform(
+        &self,
+        physics_transforms: &Query<(&Position, &Rotation)>,
+    ) -> Option<Transform> {
+        let collider = self.colliders.iter().next()?;
+
+        let (position, rotation) = physics_transforms.get(collider).ok()?;
+        let transform = Transform {
+            translation: position.0,
+            rotation: rotation.0,
+            scale: Vec3::ONE,
+        };
+        Some(transform)
     }
 
-    fn update_global_transform(&mut self, transform: Transform, collider_transform: Transform) {
-        let rb_transform =
-            transform.compute_affine() * collider_transform.compute_affine().inverse();
-        let parent = self.global_transform(Transform::IDENTITY).affine()
-            * GlobalTransform::from(*self.transform).affine().inverse();
-        let (scale, rotation, translation) = parent.to_scale_rotation_translation();
-        let parent = GlobalTransform::from(Transform {
-            scale,
-            rotation,
+    fn rigid_body_global_transform(&self) -> Transform {
+        Transform {
+            translation: self.position.0,
+            rotation: self.rotation.0,
+            scale: Vec3::ONE,
+        }
+    }
+
+    fn update_global_transform(
+        &mut self,
+        collider_transform: Transform,
+        physics_transforms: &Query<(&Position, &Rotation)>,
+    ) {
+        let old_collider_transform = self
+            .collider_global_transform(physics_transforms)
+            .expect("Should have already early returned if this fails");
+        let old_rb_transform = self.rigid_body_global_transform();
+        // Not using `Transform` as that would only work with *direct* children, not distant descendants
+        let collider_local_transform =
+            old_rb_transform.compute_affine().inverse() * old_collider_transform.compute_affine();
+        let new_rb_transform =
+            collider_transform.compute_affine() * collider_local_transform.inverse();
+        let (scale, rotation, translation) = new_rb_transform.to_scale_rotation_translation();
+        *self.transform = Transform {
             translation,
-        });
-        let local_transform = GlobalTransform::from(rb_transform).reparented_to(&parent);
-        *self.transform = local_transform;
+            rotation,
+            scale,
+        };
     }
 }
 
@@ -96,26 +188,20 @@ fn run_kcc(
     move_and_slide: MoveAndSlide,
     // TODO: allow this to be other KCCs
     colliders: Query<ColliderComponents, (Without<CharacterController>, Without<Sensor>)>,
-    transforms: Query<&Transform, Without<CharacterController>>,
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
+    physics_transforms: Query<(&Position, &Rotation)>,
 ) {
     let mut colliders = colliders.transmute_lens_inner();
     let colliders = colliders.query();
     let mut waters = waters.transmute_lens_inner();
     let waters = waters.query();
     for mut ctx in &mut kccs {
-        let Some(collider) = ctx.colliders.iter().next() else {
-            error!("Cannot update KCC without a collider");
+        let Some(mut transform) = ctx.collider_global_transform(&physics_transforms) else {
+            error!("Cannot update KCC: The collider is in a corrupt state. Skipping.");
             continue;
         };
-        let collider_transform = if ctx.entity == collider {
-            Transform::IDENTITY
-        } else {
-            transforms.get(collider).copied().unwrap_or_default()
-        };
-        let mut transform = ctx.global_transform(collider_transform).compute_transform();
 
         ctx.output.mantle = None;
         ctx.output.touching_entities.clear();
@@ -251,7 +337,7 @@ fn run_kcc(
             ctx.state.last_ground.reset();
         }
         // TODO: check_falling();
-        ctx.update_global_transform(transform, collider_transform);
+        ctx.update_global_transform(transform, &physics_transforms);
     }
 }
 
