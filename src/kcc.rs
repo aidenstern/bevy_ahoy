@@ -1339,23 +1339,25 @@ fn friction(
     }
 
     let mut drop = 0.0;
-    let surface_friction = if let Some(grounded) = ctx.state.grounded.as_ref()
-        && let Ok(ground) = colliders.get(grounded.entity)
-    {
-        if let Some(friction) = ground.friction {
-            friction.dynamic_coefficient
-        } else if let Some(friction) = rigid_bodies
-            .get(ground.body.body)
-            .ok()
-            .and_then(|rb| rb.friction)
-        {
-            friction.dynamic_coefficient
-        } else {
-            default_friction.dynamic_coefficient
-        }
-    } else {
-        Friction::default().dynamic_coefficient
-    };
+    let surface_friction =
+        // use ground friction if grounded
+        ctx.state.grounded
+            .map(|grounded| {
+                colliders
+                    .get(grounded.entity)
+                    .ok()
+                    .and_then(|ground|
+                        ground.friction.or_else(||
+                            rigid_bodies
+                                .get(ground.body.body)
+                                .ok()
+                                .and_then(|ridid_body| ridid_body.friction)
+                        )
+                    )
+                    .unwrap_or(&default_friction.0)
+            })
+            // use the air friction if not grounded
+            .unwrap_or(&ctx.cfg.air_friction).dynamic_coefficient;
 
     let friction = ctx.cfg.friction_hz * surface_friction;
     let control = f32::max(speed, ctx.cfg.stop_speed);
