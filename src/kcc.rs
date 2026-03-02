@@ -1354,19 +1354,17 @@ fn friction(
         // use ground friction if grounded
         ctx.state.grounded
             .map(|grounded| {
-                // use friction of the ground's collider if it has one
                 colliders
                     .get(grounded.entity)
                     .ok()
-                    .and_then(|collider| collider.friction)
-                    // otherwise check if the ground has a rigid body with friction
-                    .or_else(||
-                        rigid_bodies
-                            .get(grounded.entity)
-                            .ok()
-                            .and_then(|ridid_body| ridid_body.friction)
+                    .and_then(|ground|
+                        ground.friction.or_else(||
+                            rigid_bodies
+                                .get(ground.body.body)
+                                .ok()
+                                .and_then(|ridid_body| ridid_body.friction)
+                        )
                     )
-                    // otherwise, use the default friction
                     .unwrap_or(&default_friction.0)
             })
             // use the air friction if not grounded
