@@ -170,7 +170,6 @@ fn run_kcc(
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
-    default_air_friction: Res<DefaultAirFriction>,
     physics_transforms: Query<(&Position, &Rotation)>,
 ) {
     let mut colliders = colliders.transmute_lens_inner();
@@ -264,7 +263,6 @@ fn run_kcc(
                 &colliders,
                 &rigid_bodies,
                 &default_friction,
-                &default_air_friction,
                 &mut ctx,
             );
 
@@ -1335,7 +1333,6 @@ fn friction(
     colliders: &Query<ColliderComponents>,
     rigid_bodies: &Query<RigidBodyComponents>,
     default_friction: &DefaultFriction,
-    default_air_friction: &DefaultAirFriction,
     ctx: &mut CtxItem,
 ) {
     let speed = if ctx.state.grounded.is_some() {
@@ -1368,7 +1365,7 @@ fn friction(
                     .unwrap_or(&default_friction.0)
             })
             // use the air friction if not grounded
-            .unwrap_or(ctx.cfg.air_friction.as_ref().unwrap_or(&default_air_friction.0)).dynamic_coefficient;
+            .unwrap_or(&ctx.cfg.air_friction).dynamic_coefficient;
 
     let friction = ctx.cfg.friction_hz * surface_friction;
     let control = f32::max(speed, ctx.cfg.stop_speed);
