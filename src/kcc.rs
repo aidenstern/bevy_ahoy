@@ -26,11 +26,19 @@ pub struct AhoyKccPlugin {
 
 impl Plugin for AhoyKccPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<DefaultAirFriction>();
         app.add_systems(self.schedule, run_kcc.in_set(AhoySystems::MoveCharacters))
             .add_systems(Update, (spin_character_look,))
             .add_systems(PreUpdate, setup_collider);
     }
 }
+
+/// Default air friction applied to characters when not grounded.
+#[derive(Resource, Clone, Debug, Default, Reflect)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
+#[reflect(Resource)]
+pub struct DefaultAirFriction(pub Friction);
 
 #[derive(Component, Debug)]
 struct CharacterControllerDone;
@@ -162,6 +170,7 @@ fn run_kcc(
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
+    default_air_friction: Res<DefaultAirFriction>,
     physics_transforms: Query<(&Position, &Rotation)>,
 ) {
     let mut colliders = colliders.transmute_lens_inner();
@@ -255,6 +264,7 @@ fn run_kcc(
                 &colliders,
                 &rigid_bodies,
                 &default_friction,
+                &default_air_friction,
                 &mut ctx,
             );
 
@@ -1325,6 +1335,7 @@ fn friction(
     colliders: &Query<ColliderComponents>,
     rigid_bodies: &Query<RigidBodyComponents>,
     default_friction: &DefaultFriction,
+    default_air_friction: &DefaultAirFriction,
     ctx: &mut CtxItem,
 ) {
     let speed = if ctx.state.grounded.is_some() {
@@ -1359,7 +1370,7 @@ fn friction(
                     .unwrap_or(&default_friction.0)
             })
             // use the air friction if not grounded
-            .unwrap_or(&ctx.cfg.air_friction).dynamic_coefficient;
+            .unwrap_or(ctx.cfg.air_friction.as_ref().unwrap_or(&default_air_friction.0)).dynamic_coefficient;
 
     let friction = ctx.cfg.friction_hz * surface_friction;
     let control = f32::max(speed, ctx.cfg.stop_speed);
