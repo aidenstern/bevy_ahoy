@@ -16,24 +16,28 @@ pub mod prelude {
     };
 
     pub use crate::{
-        AhoyPlugins, AhoySystems, CharacterController, CharacterControllerState, PickupConfig,
+        AhoyPlugins, AhoySystems, CharacterController, CharacterControllerState,
         camera::{CharacterControllerCamera, CharacterControllerCameraOf},
         input::{
-            Climbdown, Crane, Crouch, DropObject, GlobalMovement, Jump, Mantle, Movement,
-            PullObject, RotateCamera, SwimUp, Tac, ThrowObject, YankCamera,
+            Climbdown, Crane, Crouch, GlobalMovement, Jump, Mantle, Movement, RotateCamera, SwimUp,
+            Tac, YankCamera,
         },
-        pickup,
         water::{Water, WaterLevel, WaterState},
+    };
+
+    #[cfg(feature = "pickup")]
+    pub use crate::{
+        PickupConfig,
+        input::{DropObject, PullObject, ThrowObject},
+        pickup,
     };
 }
 
-pub use crate::{
-    camera::AhoyCameraPlugin, dynamics::AhoyDynamicPlugin,
-    fixed_update_utils::AhoyFixedUpdateUtilsPlugin, input::AhoyInputPlugin, kcc::AhoyKccPlugin,
-    pickup_glue::AhoyPickupGluePlugin, water::AhoyWaterPlugin,
-};
-use crate::{input::AccumulatedInput, prelude::*};
+#[cfg(feature = "pickup")]
+pub use crate::pickup_glue::AhoyPickupGluePlugin;
+#[cfg(feature = "pickup")]
 use avian_pickup::AvianPickupPlugin;
+#[cfg(feature = "pickup")]
 pub use avian_pickup::{
     self as pickup,
     prelude::{
@@ -42,6 +46,13 @@ pub use avian_pickup::{
         AvianPickupActorThrowConfig as PickupThrowConfig,
     },
 };
+
+pub use crate::{
+    camera::AhoyCameraPlugin, dynamics::AhoyDynamicPlugin,
+    fixed_update_utils::AhoyFixedUpdateUtilsPlugin, input::AhoyInputPlugin, kcc::AhoyKccPlugin,
+    water::AhoyWaterPlugin,
+};
+use crate::{input::AccumulatedInput, prelude::*};
 use avian3d::character_controller::move_and_slide::MoveHitData;
 use bevy_app::PluginGroupBuilder;
 use bevy_ecs::{intern::Interned, schedule::ScheduleLabel};
@@ -53,13 +64,15 @@ mod dynamics;
 mod fixed_update_utils;
 pub mod input;
 mod kcc;
+#[cfg(feature = "pickup")]
 mod pickup_glue;
 mod water;
 
 /// Plugin group for Ahoy's internal plugins.
 ///
 /// It requires you to add [`PhysicsPlugins`] and [`EnhancedInputPlugin`] to work properly.
-/// Also adds [`AvianPickupPlugin`].
+///
+/// Also adds [`AvianPickupPlugin`] if `pickup` feature is enabled.
 pub struct AhoyPlugins {
     schedule: Interned<dyn ScheduleLabel>,
 }
@@ -83,7 +96,7 @@ impl Default for AhoyPlugins {
 
 impl PluginGroup for AhoyPlugins {
     fn build(self) -> PluginGroupBuilder {
-        PluginGroupBuilder::start::<Self>()
+        let plugin = PluginGroupBuilder::start::<Self>()
             .add(AhoySchedulePlugin {
                 schedule: self.schedule,
             })
@@ -94,11 +107,16 @@ impl PluginGroup for AhoyPlugins {
             })
             .add(AhoyWaterPlugin)
             .add(AhoyFixedUpdateUtilsPlugin)
-            .add(AhoyPickupGluePlugin)
             .add(AhoyDynamicPlugin {
                 schedule: self.schedule,
-            })
+            });
+
+        #[cfg(feature = "pickup")]
+        let plugin = plugin
             .add(AvianPickupPlugin::default())
+            .add(AhoyPickupGluePlugin);
+
+        plugin
     }
 }
 
