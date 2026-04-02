@@ -17,7 +17,7 @@ serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
 pickup = []
 
 [dependencies]
-avian3d = { version = "0.7.0-dev", git = "https://github.com/janhohenheim/avian3d", default-features = false, branch = "bevy-0.19", features = ["parry-f32", "3d", "f32"] }
+avian3d = { version = "0.7.0-dev", git = "https://github.com/janhohenheim/avian", default-features = false, branch = "bevy-0.19", features = ["parry-f32", "3d", "f32"] }
 bevy_ecs = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
 bevy_app = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
 bevy_derive = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
