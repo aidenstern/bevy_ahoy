@@ -12,31 +12,31 @@ categories = ["game-development"]
 include = ["/src", "/license*", "/examples"]
 
 [features]
-default = ["pickup"]
-serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize", "avian_pickup/serialize"]
-pickup = ["dep:avian_pickup"]
+default = []
+serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
+pickup = []
 
 [dependencies]
-avian3d = { version = "0.6.0-rc.1", default-features = false, features = ["parry-f32", "3d", "f32"] }
-bevy_ecs = { version = "0.18", default-features = false }
-bevy_app = { version = "0.18", default-features = false }
-bevy_derive = { version = "0.18", default-features = false }
-bevy_utils = { version = "0.18", default-features = false }
-bevy_math = { version = "0.18", default-features = false }
-bevy_reflect = { version = "0.18", default-features = false }
-bevy_transform = { version = "0.18", default-features = false }
-bevy_time = { version = "0.18", default-features = false }
-bevy_enhanced_input = { version = "0.24", default-features = false }
+avian3d = { version = "0.7.0-dev", git = "https://github.com/janhohenheim/avian3d", default-features = false, branch = "bevy-0.19", features = ["parry-f32", "3d", "f32"] }
+bevy_ecs = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_app = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_derive = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_utils = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_math = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_reflect = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_transform = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_time = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", default-features = false }
+bevy_enhanced_input = { version = "0.25.0", path = git = "https://github.com/janhohenheim/bevy_enhanced_input", branch = "bevy-0.19", default-features = false }
 tracing = { version = "0.1", default-features = false }
-avian_pickup = { version = "0.5.0-rc.1", default-features = false, optional = true }
+#avian_pickup = { version = "0.5.0-rc.1", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
 [dev-dependencies]
-bevy = { version = "0.18", features = ["track_location", "dynamic_linking", "file_watcher"] }
+bevy = { git = "https://github.com/bevyengine/bevy", rev = "d06aa47744dfa378f2e8a31cd7ff2d59c9afe4b9", features = ["track_location", "dynamic_linking", "file_watcher"] }
 bevy_trenchbroom = { version = "0.12.0", git = "https://github.com/janhohenheim/bevy_trenchbroom", branch = "avian-0.6" }
 bevy_trenchbroom_avian = { version = "0.13.0-rc.1", git = "https://github.com/janhohenheim/bevy_trenchbroom", branch = "avian-0.6" }
 bevy_mod_mipmap_generator = { version = "0.1.0", git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
-avian3d = "0.6.0-rc.1"
+#avian3d = "0.6.0-rc.1"
 bevy_framepace = { version = "0.21.0", git = "https://github.com/aevyrie/bevy_framepace" }
 bevy_fix_cursor_unlock_web = "0.3.0"
 wasm-bindgen = "=0.2.108"
