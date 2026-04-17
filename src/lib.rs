@@ -25,6 +25,9 @@ pub mod prelude {
         water::{Water, WaterLevel, WaterState},
     };
 
+    #[cfg(feature = "networking")]
+    pub use crate::networking::AhoyNetworkingPlugin;
+
     #[cfg(feature = "pickup")]
     pub use crate::{
         PickupConfig,
@@ -64,6 +67,8 @@ mod dynamics;
 mod fixed_update_utils;
 pub mod input;
 mod kcc;
+#[cfg(feature = "networking")]
+pub mod networking;
 #[cfg(feature = "pickup")]
 mod pickup_glue;
 mod water;

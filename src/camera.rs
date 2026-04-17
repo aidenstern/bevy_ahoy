@@ -6,7 +6,7 @@ use bevy_ecs::{lifecycle::HookContext, relationship::Relationship, world::Deferr
 
 use crate::{
     CharacterControllerDerivedProps, CharacterControllerState, CharacterLook,
-    kcc::spin_character_look, prelude::*,
+    kcc::spin_kcc, prelude::*,
 };
 
 pub struct AhoyCameraPlugin;
@@ -18,11 +18,12 @@ impl Plugin for AhoyCameraPlugin {
             (
                 copy_camera_to_character_look.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
                 sync_camera_transform.after(TransformEasingSystems::UpdateEasingTick),
+                copy_kcc_yaw_to_camera,
             ),
         )
         .add_systems(
             Update,
-            copy_character_look_to_camera.after(spin_character_look),
+            copy_character_look_to_camera.after(spin_kcc),
         )
         .add_observer(rotate_camera)
         .add_observer(yank_camera);
@@ -161,7 +162,7 @@ fn copy_camera_to_character_look(
 
 fn copy_character_look_to_camera(
     cameras: Query<(&CharacterLook, &CharacterControllerCamera)>,
-    mut transforms: Query<&mut Transform>,
+    mut transforms: Query<&mut Transform, Without<CharacterControllerCamera>>,
 ) {
     for (character_look, camera) in &cameras {
         let Ok(mut transform) = transforms.get_mut(camera.get()) else {
@@ -179,17 +180,26 @@ fn rotate_camera(
     let Ok(camera) = cameras.get(rotate.context) else {
         return;
     };
-    let Ok(mut transform) = transforms.get_mut(camera.get()) else {
-        return;
-    };
-    let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
 
     let delta = -rotate.value;
-    yaw += delta.x.to_radians();
+
+    // First, rotate the KCC's yaw.
+    let Ok(mut kcc_transform) = transforms.get_mut(rotate.context) else {
+        return;
+    };
+    let (mut kcc_yaw, pitch, roll) = kcc_transform.rotation.to_euler(EulerRot::YXZ);
+    kcc_yaw += delta.x.to_radians();
+    kcc_transform.rotation = Quat::from_euler(EulerRot::YXZ, kcc_yaw, pitch, roll);
+
+    // Now, make the camera match the KCC's yaw and apply the pitch.
+    let Ok(mut camera_transform) = transforms.get_mut(camera.get()) else {
+        return;
+    };
+    let (_, mut pitch, roll) = camera_transform.rotation.to_euler(EulerRot::YXZ);
     pitch += delta.y.to_radians();
     pitch = pitch.clamp(-TAU / 4.0 + 0.01, TAU / 4.0 - 0.01);
 
-    transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
+    camera_transform.rotation = Quat::from_euler(EulerRot::YXZ, kcc_yaw, pitch, roll);
 }
 
 fn yank_camera(
@@ -205,13 +215,32 @@ fn yank_camera(
     let Ok(camera_of) = camera_ofs.get(camera.get()) else {
         return;
     };
-    let Ok(mut transform) = transforms.get_mut(camera.get()) else {
+
+    // Rotate the KCC's yaw.
+    let Ok(mut kcc_transform) = transforms.get_mut(trigger.context) else {
         return;
     };
-
-    let (mut yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
     let rotation_delta = camera_of.yank_speed * trigger.value * time.delta_secs();
-    yaw -= rotation_delta;
+    let (mut kcc_yaw, pitch, roll) = kcc_transform.rotation.to_euler(EulerRot::YXZ);
+    kcc_yaw += rotation_delta;
+    kcc_transform.rotation = Quat::from_euler(EulerRot::YXZ, kcc_yaw, pitch, roll);
 
-    transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
+    // copy_kcc_yaw_to_camera will sync the camera on the next frame.
+}
+
+fn copy_kcc_yaw_to_camera(
+    cameras: Query<(Entity, &CharacterControllerCamera)>,
+    mut transforms: Query<&mut Transform>,
+) {
+    for (kcc, camera) in &cameras {
+        let Ok([kcc_transform, mut camera_transform]) =
+            transforms.get_many_mut([kcc, camera.get()])
+        else {
+            continue;
+        };
+
+        let (kcc_yaw, _, _) = kcc_transform.rotation.to_euler(EulerRot::YXZ);
+        let (_, pitch, roll) = camera_transform.rotation.to_euler(EulerRot::YXZ);
+        camera_transform.rotation = Quat::from_euler(EulerRot::YXZ, kcc_yaw, pitch, roll);
+    }
 }

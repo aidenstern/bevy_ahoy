@@ -9,7 +9,6 @@ use bevy_ecs::{
     schedule::ScheduleLabel,
     system::lifetimeless::{Read, Write},
 };
-use bevy_math::Affine3A;
 use core::fmt::Debug;
 use core::time::Duration;
 use std::sync::Arc;
@@ -27,7 +26,7 @@ pub struct AhoyKccPlugin {
 impl Plugin for AhoyKccPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(self.schedule, run_kcc.in_set(AhoySystems::MoveCharacters))
-            .add_systems(Update, (spin_character_look,))
+            .add_systems(Update, (spin_kcc,))
             .add_systems(PreUpdate, setup_collider);
     }
 }
@@ -108,31 +107,11 @@ struct Ctx {
     state: Write<CharacterControllerState>,
     derived: Read<CharacterControllerDerivedProps>,
     output: Write<CharacterControllerOutput>,
-    transform: Write<Transform>,
-    position: Read<Position>,
-    rotation: Read<Rotation>,
     input: Write<AccumulatedInput>,
     cfg: Read<CharacterController>,
     water: Read<WaterState>,
     look: Option<Read<CharacterLook>>,
     colliders: Read<RigidBodyColliders>,
-}
-
-impl CtxItem<'_, '_> {
-    fn collider_global_transform(
-        &self,
-        physics_transforms: &Query<(&Position, &Rotation)>,
-    ) -> Option<Transform> {
-        let collider = self.colliders.iter().next()?;
-
-        let (position, rotation) = physics_transforms.get(collider).ok()?;
-        let transform = Transform {
-            translation: position.0,
-            rotation: rotation.0,
-            scale: Vec3::ONE,
-        };
-        Some(transform)
-    }
 }
 
 #[derive(QueryData)]
@@ -156,24 +135,49 @@ struct RigidBodyComponents {
 fn run_kcc(
     mut kccs: Query<Ctx>,
     time: Res<Time>,
-    move_and_slide: MoveAndSlide,
+    mut physics: ParamSet<(
+        Query<(&mut Position, &Rotation), With<CharacterController>>,
+        MoveAndSlide,
+    )>,
     // TODO: allow this to be other KCCs
     colliders: Query<ColliderComponents, (Without<CharacterController>, Without<Sensor>)>,
     rigid_bodies: Query<RigidBodyComponents>,
     waters: Query<Entity, With<Water>>,
     default_friction: Res<DefaultFriction>,
-    physics_transforms: Query<(&Position, &Rotation)>,
 ) {
+    let initial_positions: Vec<(Entity, Vec3, Quat)> = {
+        let positions = physics.p0();
+        kccs.iter()
+            .filter_map(|ctx| {
+                positions
+                    .get(ctx.entity)
+                    .ok()
+                    .map(|(pos, rot)| (ctx.entity, pos.0, rot.0))
+            })
+            .collect()
+    };
+
     let mut colliders = colliders.transmute_lens_inner();
     let colliders = colliders.query();
     let mut waters = waters.transmute_lens_inner();
     let waters = waters.query();
-    for mut ctx in &mut kccs {
-        let Some(mut transform) = ctx.collider_global_transform(&physics_transforms) else {
-            error!("Cannot update KCC: The collider is in a corrupt state. Skipping.");
-            continue;
-        };
-        let original_transform = transform;
+
+    let mut position_deltas: Vec<(Entity, Vec3)> = Vec::new();
+
+    {
+        let move_and_slide = physics.p1();
+        for mut ctx in &mut kccs {
+            let Some(&(_, pos, rot)) =
+                initial_positions.iter().find(|(e, _, _)| *e == ctx.entity)
+            else {
+                continue;
+            };
+            let mut transform = Transform {
+                translation: pos,
+                rotation: rot,
+                scale: Vec3::ONE,
+            };
+            let original_transform = transform;
 
         ctx.output.mantle = None;
         ctx.output.touching_entities.clear();
@@ -310,17 +314,16 @@ fn run_kcc(
         }
         // TODO: check_falling();
 
-        let movement = original_transform.compute_affine().inverse() * transform.compute_affine();
-        *ctx.transform = affine_to_transform(ctx.transform.compute_affine() * movement);
+        let translation_delta = transform.translation - original_transform.translation;
+        position_deltas.push((ctx.entity, translation_delta));
+        }
     }
-}
 
-fn affine_to_transform(affine: Affine3A) -> Transform {
-    let (scale, rotation, translation) = affine.to_scale_rotation_translation();
-    Transform {
-        translation,
-        rotation,
-        scale,
+    let mut positions = physics.p0();
+    for (entity, delta) in position_deltas {
+        if let Ok((mut pos, _)) = positions.get_mut(entity) {
+            pos.0 += delta;
+        }
     }
 }
 
@@ -1608,20 +1611,17 @@ fn is_intersecting(
     intersecting
 }
 
-pub(crate) fn spin_character_look(
-    mut kccs: Query<(&CharacterControllerState, &mut CharacterLook)>,
+pub(crate) fn spin_kcc(
+    mut kccs: Query<(&CharacterControllerState, &mut Transform), With<CharacterController>>,
     time: Res<Time>,
 ) {
-    for (state, mut look) in &mut kccs {
-        if state.grounded.is_none() {
-            continue;
+    for (state, mut transform) in &mut kccs {
+        if state.grounded.is_some() {
+            transform.rotate_axis(
+                Dir3::Y,
+                state.platform_angular_velocity.y * time.delta_secs(),
+            );
         }
-        // Note: we're doing this using Quats (instead of just adding to the yaw) to avoid dealing
-        // wrap around of angles.
-        *look = CharacterLook::from_quat(
-            Quat::from_rotation_y(state.platform_angular_velocity.y * time.delta_secs())
-                * look.to_quat(),
-        );
     }
 }
 
