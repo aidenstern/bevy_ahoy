@@ -5,31 +5,6 @@ use lightyear::prelude::*;
 
 use crate::CharacterLook;
 
-/// Plugin that configures networking for bevy_ahoy using lightyear.
-///
-/// This plugin:
-/// - Adds the [`LightyearAvianPlugin`] with [`AvianReplicationMode::Position`]
-/// - Registers [`Position`], [`Rotation`], [`LinearVelocity`], and [`CharacterLook`]
-///   for replication with prediction, rollback, correction, and interpolation
-///
-/// # Usage
-///
-/// Add this plugin to your app **after** adding [`lightyear::prelude::ClientPlugins`] or
-/// [`lightyear::prelude::ServerPlugins`], and **before** adding physics plugins.
-///
-/// When adding [`PhysicsPlugins`], you **must** disable the following plugins
-/// since lightyear handles their responsibilities:
-///
-/// ```ignore
-/// app.add_plugins(
-///     PhysicsPlugins::default()
-///         .build()
-///         .disable::<PhysicsTransformPlugin>()
-///         .disable::<PhysicsInterpolationPlugin>()
-///         .disable::<IslandPlugin>()
-///         .disable::<IslandSleepingPlugin>(),
-/// );
-/// ```
 pub struct AhoyNetworkingPlugin;
 
 impl Plugin for AhoyNetworkingPlugin {
