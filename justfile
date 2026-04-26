@@ -45,6 +45,10 @@ check-all:
 test:
     cargo test
 
+# Smoke test: launch the game for 300 frames (~5 seconds) and auto-exit
+smoke-test:
+    cargo run -- --frames 300
+
 # Check + clippy lints
 lint:
     cargo clippy -- -D warnings

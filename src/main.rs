@@ -22,9 +22,18 @@ use std::{collections::VecDeque, time::Duration};
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 20.0, 0.0);
 const NPC_SPAWN_POINT: Vec3 = Vec3::new(-55.0, 55.0, 1.0);
 
+/// If set, the game will automatically exit after this many frames.
+#[derive(Resource)]
+struct ExitAfterFrames(u32);
+
 fn main() -> AppExit {
-    App::new()
-        .add_plugins((
+    let exit_after = std::env::args()
+        .position(|a| a == "--frames")
+        .and_then(|i| std::env::args().nth(i + 1))
+        .and_then(|v| v.parse::<u32>().ok());
+
+    let mut app = App::new();
+    app.add_plugins((
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Window {
@@ -73,8 +82,25 @@ fn main() -> AppExit {
         .add_observer(tweak_camera)
         .add_observer(tweak_directional_light)
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
-        .insert_resource(GlobalAmbientLight::NONE)
-        .run()
+        .insert_resource(GlobalAmbientLight::NONE);
+
+    if let Some(frames) = exit_after {
+        app.insert_resource(ExitAfterFrames(frames))
+            .add_systems(Update, auto_exit);
+    }
+
+    app.run()
+}
+
+fn auto_exit(
+    frame_count: Res<bevy::diagnostic::FrameCount>,
+    limit: Res<ExitAfterFrames>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if frame_count.0 >= limit.0 {
+        info!("Smoke test passed: exiting after {} frames", frame_count.0);
+        exit.write(AppExit::Success);
+    }
 }
 
 // --- Core setup ---
