@@ -82,7 +82,11 @@ fn main() -> AppExit {
         .add_observer(tweak_camera)
         .add_observer(tweak_directional_light)
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
-        .insert_resource(GlobalAmbientLight::NONE);
+        .insert_resource(GlobalAmbientLight::NONE)
+        .add_systems(Update, (
+            add_map_colliders,
+            debug_colliders.run_if(on_timer(Duration::from_secs(3))),
+        ));
 
     if let Some(frames) = exit_after {
         app.insert_resource(ExitAfterFrames(frames))
@@ -101,6 +105,21 @@ fn auto_exit(
         info!("Smoke test passed: exiting after {} frames", frame_count.0);
         exit.write(AppExit::Success);
     }
+}
+
+fn debug_colliders(
+    map: Query<(Entity, Option<&Children>, Option<&Collider>, Option<&RigidBody>, Option<&ColliderConstructorHierarchy>), With<SceneRoot>>,
+    all_colliders: Query<(Entity, &Collider, Option<&RigidBody>, Option<&ChildOf>)>,
+    children_q: Query<&Children>,
+) {
+    for (entity, children, collider, rb, cch) in &map {
+        let child_count = children.map(|c| c.len()).unwrap_or(0);
+        let descendant_count = children_q.iter_descendants(entity).count();
+        info!("Map entity {entity}: children={child_count}, descendants={descendant_count}, has_collider={}, has_rb={}, has_cch={}", collider.is_some(), rb.is_some(), cch.is_some());
+    }
+    let total = all_colliders.iter().count();
+    let with_rb = all_colliders.iter().filter(|(_, _, rb, _)| rb.is_some()).count();
+    info!("Total entities with Collider: {total}, of those with RigidBody: {with_rb}");
 }
 
 // --- Core setup ---
@@ -149,10 +168,38 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     ));
 
     commands.spawn((
+        MapRoot,
         SceneRoot(assets.load("maps/playground.glb#Scene0")),
         RigidBody::Static,
-        ColliderConstructorHierarchy::new(ColliderConstructor::ConvexHullFromMesh),
     ));
+}
+
+#[derive(Component)]
+struct MapRoot;
+
+fn add_map_colliders(
+    mut commands: Commands,
+    map: Query<Entity, (With<MapRoot>, Without<ColliderConstructorHierarchy>)>,
+    children: Query<&Children>,
+    mesh_handles: Query<&Mesh3d>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    let Ok(map_entity) = map.single() else {
+        return;
+    };
+    let all_meshes_loaded = children
+        .iter_descendants(map_entity)
+        .filter_map(|child| mesh_handles.get(child).ok())
+        .all(|handle| meshes.contains(&handle.0));
+    let has_any_mesh = children
+        .iter_descendants(map_entity)
+        .any(|child| mesh_handles.contains(child));
+    if has_any_mesh && all_meshes_loaded {
+        info!("All map mesh assets loaded, adding ColliderConstructorHierarchy");
+        commands
+            .entity(map_entity)
+            .insert(ColliderConstructorHierarchy::new(ColliderConstructor::ConvexHullFromMesh));
+    }
 }
 
 #[derive(Component, Reflect, Debug)]
