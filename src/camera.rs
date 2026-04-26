@@ -5,8 +5,8 @@ use avian_pickup::actor::AvianPickupActor;
 use bevy_ecs::{lifecycle::HookContext, relationship::Relationship, world::DeferredWorld};
 
 use crate::{
-    CharacterControllerDerivedProps, CharacterControllerState, CharacterLook,
-    kcc::spin_kcc, prelude::*,
+    CharacterControllerDerivedProps, CharacterControllerState, CharacterLook, kcc::spin_kcc,
+    prelude::*,
 };
 
 pub struct AhoyCameraPlugin;
@@ -21,10 +21,7 @@ impl Plugin for AhoyCameraPlugin {
                 copy_kcc_yaw_to_camera,
             ),
         )
-        .add_systems(
-            Update,
-            copy_character_look_to_camera.after(spin_kcc),
-        )
+        .add_systems(Update, copy_character_look_to_camera.after(spin_kcc))
         .add_observer(rotate_camera)
         .add_observer(yank_camera);
     }

@@ -167,8 +167,7 @@ fn run_kcc(
     {
         let move_and_slide = physics.p1();
         for mut ctx in &mut kccs {
-            let Some(&(_, pos, rot)) =
-                initial_positions.iter().find(|(e, _, _)| *e == ctx.entity)
+            let Some(&(_, pos, rot)) = initial_positions.iter().find(|(e, _, _)| *e == ctx.entity)
             else {
                 continue;
             };
@@ -179,143 +178,143 @@ fn run_kcc(
             };
             let original_transform = transform;
 
-        ctx.output.mantle = None;
-        ctx.output.touching_entities.clear();
-        ctx.state.last_ground.tick(time.delta());
-        ctx.state.last_tac.tick(time.delta());
-        ctx.state.last_step_up.tick(time.delta());
-        ctx.state.last_step_down.tick(time.delta());
+            ctx.output.mantle = None;
+            ctx.output.touching_entities.clear();
+            ctx.state.last_ground.tick(time.delta());
+            ctx.state.last_tac.tick(time.delta());
+            ctx.state.last_step_up.tick(time.delta());
+            ctx.state.last_step_down.tick(time.delta());
 
-        depenetrate_character(&move_and_slide, &mut ctx, &mut transform);
-        update_grounded(&move_and_slide, &colliders, &time, &mut ctx, &mut transform);
+            depenetrate_character(&move_and_slide, &mut ctx, &mut transform);
+            update_grounded(&move_and_slide, &colliders, &time, &mut ctx, &mut transform);
 
-        handle_crouching(&move_and_slide, &waters, &mut ctx, &mut transform);
+            handle_crouching(&move_and_slide, &waters, &mut ctx, &mut transform);
 
-        if ctx.water.level <= WaterLevel::Feet {
-            // here we'd handle things like spectator, dead, noclip, etc.
-            start_gravity(&time, &mut ctx);
-        }
+            if ctx.water.level <= WaterLevel::Feet {
+                // here we'd handle things like spectator, dead, noclip, etc.
+                start_gravity(&time, &mut ctx);
+            }
 
-        ctx.state.orientation = ctx
-            .look
-            .map(CharacterLook::to_quat)
-            .unwrap_or(transform.rotation);
+            ctx.state.orientation = ctx
+                .look
+                .map(CharacterLook::to_quat)
+                .unwrap_or(transform.rotation);
 
-        let wish_velocity = calculate_wish_velocity(&ctx);
-        let wish_velocity_3d = calculate_3d_wish_velocity(&ctx);
-        update_crane_state(
-            wish_velocity,
-            &time,
-            &move_and_slide,
-            &mut ctx,
-            &mut transform,
-        );
-        update_mantle_state(
-            wish_velocity,
-            &time,
-            &move_and_slide,
-            &mut ctx,
-            &mut transform,
-        );
-        if ctx.state.crane_height_left.is_some() {
-            handle_crane_movement(
+            let wish_velocity = calculate_wish_velocity(&ctx);
+            let wish_velocity_3d = calculate_3d_wish_velocity(&ctx);
+            update_crane_state(
                 wish_velocity,
                 &time,
                 &move_and_slide,
                 &mut ctx,
                 &mut transform,
             );
-        } else if ctx.state.mantle.is_some() {
-            handle_jump(
+            update_mantle_state(
                 wish_velocity,
                 &time,
-                &colliders,
                 &move_and_slide,
                 &mut ctx,
                 &mut transform,
             );
-            handle_mantle_movement(
-                wish_velocity_3d,
-                &time,
-                &move_and_slide,
-                &colliders,
-                &mut ctx,
-                &mut transform,
-            );
-        } else {
-            handle_jump(
-                wish_velocity,
-                &time,
-                &colliders,
-                &move_and_slide,
-                &mut ctx,
-                &mut transform,
-            );
-
-            // Friction is handled before we add in any base velocity. That way, if we are on a conveyor,
-            //  we don't slow when standing still, relative to the conveyor.
-            friction(
-                &time,
-                &colliders,
-                &rigid_bodies,
-                &default_friction,
-                &mut ctx,
-            );
-
-            validate_velocity(&mut ctx);
-
-            if ctx.water.level > WaterLevel::Feet {
-                water_move(
-                    wish_velocity_3d,
+            if ctx.state.crane_height_left.is_some() {
+                handle_crane_movement(
+                    wish_velocity,
                     &time,
                     &move_and_slide,
                     &mut ctx,
                     &mut transform,
                 );
-            } else if ctx.state.grounded.is_some() {
-                ground_move(
+            } else if ctx.state.mantle.is_some() {
+                handle_jump(
                     wish_velocity,
                     &time,
+                    &colliders,
                     &move_and_slide,
+                    &mut ctx,
+                    &mut transform,
+                );
+                handle_mantle_movement(
+                    wish_velocity_3d,
+                    &time,
+                    &move_and_slide,
+                    &colliders,
                     &mut ctx,
                     &mut transform,
                 );
             } else {
-                air_move(
+                handle_jump(
                     wish_velocity,
                     &time,
+                    &colliders,
                     &move_and_slide,
                     &mut ctx,
                     &mut transform,
                 );
+
+                // Friction is handled before we add in any base velocity. That way, if we are on a conveyor,
+                //  we don't slow when standing still, relative to the conveyor.
+                friction(
+                    &time,
+                    &colliders,
+                    &rigid_bodies,
+                    &default_friction,
+                    &mut ctx,
+                );
+
+                validate_velocity(&mut ctx);
+
+                if ctx.water.level > WaterLevel::Feet {
+                    water_move(
+                        wish_velocity_3d,
+                        &time,
+                        &move_and_slide,
+                        &mut ctx,
+                        &mut transform,
+                    );
+                } else if ctx.state.grounded.is_some() {
+                    ground_move(
+                        wish_velocity,
+                        &time,
+                        &move_and_slide,
+                        &mut ctx,
+                        &mut transform,
+                    );
+                } else {
+                    air_move(
+                        wish_velocity,
+                        &time,
+                        &move_and_slide,
+                        &mut ctx,
+                        &mut transform,
+                    );
+                }
             }
-        }
 
-        let was_grounded = ctx.state.grounded.is_some();
-        update_grounded(&move_and_slide, &colliders, &time, &mut ctx, &mut transform);
-        if was_grounded {
-            handle_climbdown(
-                wish_velocity,
-                &move_and_slide,
-                &time,
-                &mut ctx,
-                &mut transform,
-            );
-        }
-        validate_velocity(&mut ctx);
+            let was_grounded = ctx.state.grounded.is_some();
+            update_grounded(&move_and_slide, &colliders, &time, &mut ctx, &mut transform);
+            if was_grounded {
+                handle_climbdown(
+                    wish_velocity,
+                    &move_and_slide,
+                    &time,
+                    &mut ctx,
+                    &mut transform,
+                );
+            }
+            validate_velocity(&mut ctx);
 
-        if ctx.water.level <= WaterLevel::Feet {
-            finish_gravity(&time, &mut ctx);
-        }
+            if ctx.water.level <= WaterLevel::Feet {
+                finish_gravity(&time, &mut ctx);
+            }
 
-        if ctx.state.grounded.is_some() {
-            ctx.velocity.y = ctx.state.platform_velocity.y;
-            ctx.state.last_ground.reset();
-        }
-        // TODO: check_falling();
+            if ctx.state.grounded.is_some() {
+                ctx.velocity.y = ctx.state.platform_velocity.y;
+                ctx.state.last_ground.reset();
+            }
+            // TODO: check_falling();
 
-        let translation_delta = transform.translation - original_transform.translation;
-        position_deltas.push((ctx.entity, translation_delta));
+            let translation_delta = transform.translation - original_transform.translation;
+            position_deltas.push((ctx.entity, translation_delta));
         }
     }
 

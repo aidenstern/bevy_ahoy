@@ -30,8 +30,7 @@ impl Plugin for AhoyNetworkingPlugin {
             .add_prediction()
             .add_should_rollback(linear_velocity_should_rollback);
 
-        app.register_component::<CharacterLook>()
-            .add_prediction();
+        app.register_component::<CharacterLook>().add_prediction();
     }
 }
 

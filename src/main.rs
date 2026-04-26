@@ -22,6 +22,13 @@ use std::{collections::VecDeque, time::Duration};
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 20.0, 0.0);
 const NPC_SPAWN_POINT: Vec3 = Vec3::new(-55.0, 55.0, 1.0);
 
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+enum GameState {
+    #[default]
+    Loading,
+    InGame,
+}
+
 /// If set, the game will automatically exit after this many frames.
 #[derive(Resource)]
 struct ExitAfterFrames(u32);
@@ -34,59 +41,65 @@ fn main() -> AppExit {
 
     let mut app = App::new();
     app.add_plugins((
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Window {
-                        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
-                        present_mode: bevy::window::PresentMode::Mailbox,
-                        ..default()
-                    }
-                    .into(),
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Window {
+                    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+                    present_mode: bevy::window::PresentMode::Mailbox,
                     ..default()
-                })
-                .set(ImagePlugin {
-                    default_sampler: ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        address_mode_w: ImageAddressMode::Repeat,
-                        anisotropy_clamp: 16,
-                        ..ImageSamplerDescriptor::linear()
-                    },
-                }),
-            PhysicsPlugins::default(),
-            EnhancedInputPlugin,
-            AhoyPlugins::default(),
-            MipmapGeneratorPlugin,
-            FramepacePlugin,
-        ))
-        .add_input_context::<PlayerInput>()
-        .add_input_context::<DebugInput>()
-        .add_input_context::<Npc>()
-        .add_systems(Startup, (setup, setup_ui, spawn_crosshair, spawn_npc))
-        .add_systems(
-            Update,
-            (
-                capture_cursor.run_if(input_just_pressed(MouseButton::Left)),
-                release_cursor.run_if(input_just_pressed(KeyCode::Escape)),
-                update_debug_text,
-                tweak_materials,
-                generate_mipmaps::<StandardMaterial>,
-                calculate_stable_ground.run_if(on_timer(Duration::from_secs(1))),
-                apply_last_stable_ground.after(calculate_stable_ground),
-                turn_sun,
-            ),
+                }
+                .into(),
+                ..default()
+            })
+            .set(ImagePlugin {
+                default_sampler: ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    address_mode_w: ImageAddressMode::Repeat,
+                    anisotropy_clamp: 16,
+                    ..ImageSamplerDescriptor::linear()
+                },
+            }),
+        PhysicsPlugins::default(),
+        EnhancedInputPlugin,
+        AhoyPlugins::default(),
+        MipmapGeneratorPlugin,
+        FramepacePlugin,
+    ))
+    .init_state::<GameState>()
+    .add_input_context::<PlayerInput>()
+    .add_input_context::<DebugInput>()
+    .add_input_context::<Npc>()
+    .add_systems(Startup, load_map)
+    .add_systems(
+        Update,
+        add_map_colliders.run_if(in_state(GameState::Loading)),
+    )
+    .add_systems(
+        OnEnter(GameState::InGame),
+        (setup, setup_ui, spawn_crosshair, spawn_npc),
+    )
+    .add_systems(
+        Update,
+        (
+            capture_cursor.run_if(input_just_pressed(MouseButton::Left)),
+            release_cursor.run_if(input_just_pressed(KeyCode::Escape)),
+            update_debug_text,
+            tweak_materials,
+            generate_mipmaps::<StandardMaterial>,
+            calculate_stable_ground.run_if(on_timer(Duration::from_secs(1))),
+            apply_last_stable_ground.after(calculate_stable_ground),
+            turn_sun,
         )
-        .add_systems(FixedUpdate, update_npc)
-        .add_observer(reset_player)
-        .add_observer(toggle_debug)
-        .add_observer(tweak_camera)
-        .add_observer(tweak_directional_light)
-        .insert_resource(DirectionalLightShadowMap { size: 4096 })
-        .insert_resource(GlobalAmbientLight::NONE)
-        .add_systems(Update, (
-            add_map_colliders,
-            debug_colliders.run_if(on_timer(Duration::from_secs(3))),
-        ));
+            .run_if(in_state(GameState::InGame)),
+    )
+    .add_systems(FixedUpdate, update_npc.run_if(in_state(GameState::InGame)))
+    .add_observer(reset_player)
+    .add_observer(toggle_debug)
+    .add_observer(tweak_camera)
+    .add_observer(tweak_directional_light)
+    .insert_resource(DirectionalLightShadowMap { size: 4096 })
+    .insert_resource(GlobalAmbientLight::NONE);
 
     if let Some(frames) = exit_after {
         app.insert_resource(ExitAfterFrames(frames))
@@ -107,24 +120,57 @@ fn auto_exit(
     }
 }
 
-fn debug_colliders(
-    map: Query<(Entity, Option<&Children>, Option<&Collider>, Option<&RigidBody>, Option<&ColliderConstructorHierarchy>), With<SceneRoot>>,
-    all_colliders: Query<(Entity, &Collider, Option<&RigidBody>, Option<&ChildOf>)>,
-    children_q: Query<&Children>,
+// --- Map loading ---
+
+#[derive(Component)]
+struct MapRoot;
+
+fn load_map(mut commands: Commands, assets: Res<AssetServer>) {
+    commands.spawn((
+        MapRoot,
+        SceneRoot(assets.load("maps/playground.glb#Scene0")),
+        RigidBody::Static,
+    ));
+}
+
+fn add_map_colliders(
+    mut commands: Commands,
+    map: Query<Entity, (With<MapRoot>, Without<ColliderConstructorHierarchy>)>,
+    children: Query<&Children>,
+    mesh_handles: Query<&Mesh3d>,
+    meshes: Res<Assets<Mesh>>,
+    colliders: Query<(), With<Collider>>,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
-    for (entity, children, collider, rb, cch) in &map {
-        let child_count = children.map(|c| c.len()).unwrap_or(0);
-        let descendant_count = children_q.iter_descendants(entity).count();
-        info!("Map entity {entity}: children={child_count}, descendants={descendant_count}, has_collider={}, has_rb={}, has_cch={}", collider.is_some(), rb.is_some(), cch.is_some());
+    let Ok(map_entity) = map.single() else {
+        return;
+    };
+    let has_collider = children
+        .iter_descendants(map_entity)
+        .any(|child| colliders.contains(child));
+    if has_collider {
+        next_state.set(GameState::InGame);
+        return;
     }
-    let total = all_colliders.iter().count();
-    let with_rb = all_colliders.iter().filter(|(_, _, rb, _)| rb.is_some()).count();
-    info!("Total entities with Collider: {total}, of those with RigidBody: {with_rb}");
+    let has_any_mesh = children
+        .iter_descendants(map_entity)
+        .any(|child| mesh_handles.contains(child));
+    let all_meshes_loaded = children
+        .iter_descendants(map_entity)
+        .filter_map(|child| mesh_handles.get(child).ok())
+        .all(|handle| meshes.contains(&handle.0));
+    if has_any_mesh && all_meshes_loaded {
+        commands
+            .entity(map_entity)
+            .insert(ColliderConstructorHierarchy::new(
+                ColliderConstructor::ConvexHullFromMesh,
+            ));
+    }
 }
 
 // --- Core setup ---
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
     let player = commands
         .spawn((
             Player,
@@ -166,40 +212,6 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             ..default()
         },
     ));
-
-    commands.spawn((
-        MapRoot,
-        SceneRoot(assets.load("maps/playground.glb#Scene0")),
-        RigidBody::Static,
-    ));
-}
-
-#[derive(Component)]
-struct MapRoot;
-
-fn add_map_colliders(
-    mut commands: Commands,
-    map: Query<Entity, (With<MapRoot>, Without<ColliderConstructorHierarchy>)>,
-    children: Query<&Children>,
-    mesh_handles: Query<&Mesh3d>,
-    meshes: Res<Assets<Mesh>>,
-) {
-    let Ok(map_entity) = map.single() else {
-        return;
-    };
-    let all_meshes_loaded = children
-        .iter_descendants(map_entity)
-        .filter_map(|child| mesh_handles.get(child).ok())
-        .all(|handle| meshes.contains(&handle.0));
-    let has_any_mesh = children
-        .iter_descendants(map_entity)
-        .any(|child| mesh_handles.contains(child));
-    if has_any_mesh && all_meshes_loaded {
-        info!("All map mesh assets loaded, adding ColliderConstructorHierarchy");
-        commands
-            .entity(map_entity)
-            .insert(ColliderConstructorHierarchy::new(ColliderConstructor::ConvexHullFromMesh));
-    }
 }
 
 #[derive(Component, Reflect, Debug)]
@@ -333,7 +345,12 @@ struct Reset;
 struct ToggleDebug;
 
 fn setup_ui(mut commands: Commands) {
-    commands.spawn((Node::default(), Text::default(), Visibility::Hidden, DebugText));
+    commands.spawn((
+        Node::default(),
+        Text::default(),
+        Visibility::Hidden,
+        DebugText,
+    ));
     commands.spawn((
         Node {
             justify_self: JustifySelf::End,
@@ -443,11 +460,22 @@ fn update_debug_text(
     let stable_ground = stable_ground.previous.back();
     text.0 = format!(
         "Speed: {speed:.3}\nHorizontal Speed: {horizontal_speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]\nCamera Position: [{:.3}, {:.3}, {:.3}]\nCollider Aabb:\n  min:[{:.3}, {:.3}, {:.3}]\n  max:[{:.3}, {:.3}, {:.3}]\nReal Collisions: {:#?}\nCollisions: {:#?}\nGround: {:?}\nLast Stable Ground: {:?}",
-        velocity.x, velocity.y, velocity.z,
-        camera_position.x, camera_position.y, camera_position.z,
-        aabb.min.x, aabb.min.y, aabb.min.z,
-        aabb.max.x, aabb.max.y, aabb.max.z,
-        real_collisions, collisions, ground, stable_ground,
+        velocity.x,
+        velocity.y,
+        velocity.z,
+        camera_position.x,
+        camera_position.y,
+        camera_position.z,
+        aabb.min.x,
+        aabb.min.y,
+        aabb.min.z,
+        aabb.max.x,
+        aabb.max.y,
+        aabb.max.z,
+        real_collisions,
+        collisions,
+        ground,
+        stable_ground,
     );
 }
 
@@ -651,12 +679,10 @@ impl Npc {
         else {
             return;
         };
-        let mesh = world
-            .resource_mut::<Assets<Mesh>>()
-            .add(Cylinder::new(
-                collider.as_cylinder().unwrap().radius,
-                collider.as_cylinder().unwrap().half_height * 2.0,
-            ));
+        let mesh = world.resource_mut::<Assets<Mesh>>().add(Cylinder::new(
+            collider.as_cylinder().unwrap().radius,
+            collider.as_cylinder().unwrap().half_height * 2.0,
+        ));
         let material = world
             .resource_mut::<Assets<StandardMaterial>>()
             .add(Color::WHITE);
