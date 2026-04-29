@@ -12,9 +12,10 @@ categories = ["game-development"]
 include = ["/src", "/assets", "/license*"]
 
 [features]
-default = ["pickup"]
-serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize", "avian_pickup/serialize"]
-pickup = ["dep:avian_pickup"]
+default = ["client", "server"]
+client = ["networking"]
+server = ["networking"]
+serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
 networking = ["serialize", "dep:lightyear"]
 
 [dependencies]
@@ -29,13 +30,13 @@ bevy_transform = { version = "0.18", default-features = false }
 bevy_time = { version = "0.18", default-features = false }
 bevy_enhanced_input = { version = "0.24", default-features = false }
 tracing = { version = "0.1", default-features = false }
-avian_pickup = { version = "0.5.0-rc.1", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 lightyear = { git = "https://github.com/aidenstern/lightyear", branch = "avian-0.6", default-features = false, features = ["avian3d", "prediction", "interpolation", "replication"], optional = true }
 
 bevy = { version = "0.18", features = ["track_location", "file_watcher"] }
 bevy_mod_mipmap_generator = { version = "0.1.0", git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 bevy_framepace = { version = "0.21.0", git = "https://github.com/aevyrie/bevy_framepace" }
+clap = { version = "4", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

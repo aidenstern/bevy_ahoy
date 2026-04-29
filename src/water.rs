@@ -1,15 +1,10 @@
-use crate::{CharacterControllerState, prelude::*};
+//! Water gameplay was removed during the server-authoritative migration prep.
+//!
+//! These types are kept as inert markers because [`crate::kcc`] still references
+//! [`WaterState`] and [`Water`] in its queries; nothing populates [`WaterState`]
+//! anymore, so all water-aware code paths in the kcc are dead at runtime.
 
-pub struct AhoyWaterPlugin;
-
-impl Plugin for AhoyWaterPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            FixedUpdate,
-            update_water.before(AhoySystems::MoveCharacters),
-        );
-    }
-}
+use crate::prelude::*;
 
 #[derive(Component, Default, Copy, Reflect, PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
@@ -36,40 +31,4 @@ pub enum WaterLevel {
 #[reflect(Component)]
 pub struct Water {
     pub speed: f32,
-}
-
-fn update_water(
-    mut kccs: Query<(
-        &Position,
-        &CharacterController,
-        &CharacterControllerState,
-        &mut WaterState,
-        &CollidingEntities,
-    )>,
-    waters: Query<(&Collider, &Position, &Rotation, &Water)>,
-) {
-    for (kcc_center, cfg, state, mut water_state, colliding_entities) in &mut kccs {
-        water_state.level = WaterLevel::None;
-        water_state.speed = f32::MAX;
-        let kcc_center = kcc_center.0;
-        let eye_pos = kcc_center
-            + Vec3::Y
-                * if state.crouching {
-                    cfg.crouch_view_height
-                } else {
-                    cfg.standing_view_height
-                };
-        for (collider, position, rotation, water) in waters.iter_many(colliding_entities.iter()) {
-            let level = if collider.contains_point(*position, *rotation, eye_pos) {
-                WaterLevel::Head
-            } else if collider.contains_point(*position, *rotation, kcc_center) {
-                WaterLevel::Waist
-            } else {
-                WaterLevel::Feet
-            };
-
-            water_state.level = level.max(water_state.level);
-            water_state.speed = water_state.speed.min(water.speed);
-        }
-    }
 }
