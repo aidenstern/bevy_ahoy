@@ -17,19 +17,32 @@ pub struct VisualsPlugin;
 
 impl Plugin for VisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::InGame), spawn_crosshair)
-            .add_systems(
-                Update,
-                (
-                    tweak_materials,
-                    generate_mipmaps::<StandardMaterial>,
-                    turn_sun,
-                )
-                    .run_if(in_state(GameState::InGame)),
+        app.add_systems(
+            OnEnter(GameState::InGame),
+            (spawn_crosshair, spawn_directional_light),
+        )
+        .add_systems(
+            Update,
+            (
+                tweak_materials,
+                generate_mipmaps::<StandardMaterial>,
+                turn_sun,
             )
-            .add_observer(tweak_camera)
-            .add_observer(tweak_directional_light);
+                .run_if(in_state(GameState::InGame)),
+        )
+        .add_observer(tweak_camera)
+        .add_observer(tweak_directional_light);
     }
+}
+
+fn spawn_directional_light(mut commands: Commands) {
+    commands.spawn((
+        Transform::from_xyz(0.0, 1.0, 0.0).looking_at(vec3(1.0, -2.0, -2.0), Vec3::Y),
+        DirectionalLight {
+            shadows_enabled: true,
+            ..default()
+        },
+    ));
 }
 
 fn spawn_crosshair(mut commands: Commands, asset_server: Res<AssetServer>) {

@@ -26,7 +26,7 @@ pub struct AhoyKccPlugin {
 impl Plugin for AhoyKccPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(self.schedule, run_kcc.in_set(AhoySystems::MoveCharacters))
-            .add_systems(Update, (spin_kcc,))
+            .add_systems(Update, (spin_character_look,))
             .add_systems(PreUpdate, setup_collider);
     }
 }
@@ -1610,17 +1610,20 @@ fn is_intersecting(
     intersecting
 }
 
-pub(crate) fn spin_kcc(
-    mut kccs: Query<(&CharacterControllerState, &mut Transform), With<CharacterController>>,
+pub(crate) fn spin_character_look(
+    mut kccs: Query<(&CharacterControllerState, &mut CharacterLook)>,
     time: Res<Time>,
 ) {
-    for (state, mut transform) in &mut kccs {
-        if state.grounded.is_some() {
-            transform.rotate_axis(
-                Dir3::Y,
-                state.platform_angular_velocity.y * time.delta_secs(),
-            );
+    for (state, mut look) in &mut kccs {
+        if state.grounded.is_none() {
+            continue;
         }
+        // Note: we're doing this using Quats (instead of just adding to the yaw) to avoid dealing
+        // with wrap around of angles.
+        *look = CharacterLook::from_quat(
+            Quat::from_rotation_y(state.platform_angular_velocity.y * time.delta_secs())
+                * look.to_quat(),
+        );
     }
 }
 

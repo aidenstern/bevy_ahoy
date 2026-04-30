@@ -101,7 +101,6 @@ fn toggle_debug(
     };
 }
 
-#[allow(clippy::type_complexity)]
 fn update_debug_text(
     mut text: Single<&mut Text, With<DebugText>>,
     kcc: Single<

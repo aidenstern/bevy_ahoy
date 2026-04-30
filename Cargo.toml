@@ -13,13 +13,12 @@ include = ["/src", "/assets", "/license*"]
 
 [features]
 default = ["client", "server"]
-client = ["networking"]
-server = ["networking"]
+client = ["serialize"]
+server = ["serialize"]
 serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
-networking = ["serialize", "dep:lightyear"]
 
 [dependencies]
-avian3d = { version = "0.6.0-rc.1", default-features = false, features = ["parry-f32", "3d", "f32", "collider-from-mesh"] }
+avian3d = { version = "0.6.1", default-features = false, features = ["parry-f32", "3d", "f32", "collider-from-mesh"] }
 bevy_ecs = { version = "0.18", default-features = false }
 bevy_app = { version = "0.18", default-features = false }
 bevy_derive = { version = "0.18", default-features = false }
@@ -27,16 +26,28 @@ bevy_utils = { version = "0.18", default-features = false }
 bevy_math = { version = "0.18", default-features = false }
 bevy_reflect = { version = "0.18", default-features = false }
 bevy_transform = { version = "0.18", default-features = false }
-bevy_time = { version = "0.18", default-features = false }
+bevy_time = { version = "0.18", default-features = false, features = ["serialize"] }
 bevy_enhanced_input = { version = "0.24", default-features = false }
 tracing = { version = "0.1", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-lightyear = { git = "https://github.com/aidenstern/lightyear", branch = "avian-0.6", default-features = false, features = ["avian3d", "prediction", "interpolation", "replication"], optional = true }
 
 bevy = { version = "0.18", features = ["track_location", "file_watcher"] }
 bevy_mod_mipmap_generator = { version = "0.1.0", git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 bevy_framepace = { version = "0.21.0", git = "https://github.com/aevyrie/bevy_framepace" }
 clap = { version = "4", features = ["derive"] }
+
+lightyear = { git = "https://github.com/baszalmstra/lightyear.git", rev = "9f90deca6a23e7c98028d14c98f0961e4135902d", features = [
+    "avian3d",
+    "frame_interpolation",
+    "interpolation",
+    "prediction",
+    "replication",
+    "input_native",
+    "netcode",
+    "udp",
+    "client",
+    "server",
+] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
@@ -74,9 +85,6 @@ ref_as_ptr = "warn"
 too_long_first_doc_paragraph = "allow"
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
-
-[patch.crates-io]
-bevy_transform_interpolation = { git = "https://github.com/aidenstern/bevy_transform_interpolation", branch = "patched-0.4" }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]

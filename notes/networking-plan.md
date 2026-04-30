@@ -1,90 +1,209 @@
-# Bevy Ahoy Networking Plan (lightyear + bevy_enhanced_input)
+# Bevy Ahoy Networking Plan v2 — `lightyear_ahoy` Integration
 
-Followup to the cleanup/restructure round (see `~/.claude/plans/floating-watching-kurzweil.md`).
-Distilled from research of:
-- `aidenstern/lightyear` @ `avian-0.6` examples: `avian_3d_character` (avian + leafwing) and `bevy_enhanced_inputs` (bei integration pattern).
-- `../bevy_game/src/` — working leafwing-based reference (has the LogicalPlayer/RenderPlayer split, server/client/host-client wiring, scene collider hydration).
+This **supersedes** the prior plan (which was written against `aidenstern/lightyear@avian-0.6` + a hand-rolled bei integration). The new plan piggybacks on `lightyear_ahoy`, a small networking-glue crate that andriyDev already wrote specifically to make `bevy_ahoy` server-authoritative under lightyear.
 
-## Current state (after structural prep)
+`lightyear_ahoy` location (sibling of this repo):
+- `~/dev/bevy/bevy_ahoy_testing/lightyear_ahoy/` — local clone.
 
-- `src/game/{cli,server,client,host}.rs` exist as feature-gated stubs.
-- `cargo run` = host-client mode (single-player setup runs in all branches; networking not yet wired).
-- `LogicalPlayer`, `PlayerId`, `RenderPlayer` types defined in `src/game/player.rs`.
-- `src/networking.rs` (in the lib) registers `Position`/`Rotation`/`LinearVelocity`/`CharacterLook` for prediction. **Not wired into the binary's plugin list yet** — the binary doesn't currently call `AhoyNetworkingPlugin`.
+`lightyear_ahoy` pins:
+- `bevy_ahoy = { git = ".../andriyDev/bevy_ahoy", rev = "1ac0fed" }` (the `networked` branch).
+- `lightyear = { git = ".../baszalmstra/lightyear", rev = "9f90deca6" }` — **different** from our existing `aidenstern/lightyear` pin.
+- `avian3d = "0.6.1"` (we are currently on `0.6.0-rc.1`).
+- `bevy = "0.18"`.
 
-## 1. Cargo.toml deltas
+## Strategic decisions
 
-The `lightyear` dep currently has `["avian3d", "prediction", "interpolation", "replication"]`. For bei integration:
+### 1. Throw out the old custom networking work
 
-- Add `input_bei` to the lightyear feature list. Final: `["avian3d", "prediction", "interpolation", "replication", "input_bei"]`.
-- Add per-mode lightyear sub-features so `client`/`server` only pull what they need:
-  ```toml
-  [features]
-  default = ["client", "server"]
-  client = ["networking", "lightyear/client", "lightyear/udp"]
-  server = ["networking", "lightyear/server", "lightyear/udp"]
-  serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
-  networking = ["serialize", "dep:lightyear"]
-  ```
+Drop:
+- `src/networking.rs` (replaced by `lightyear_ahoy::protocol::ProtocolPlugin`).
+- The old `notes/networking-plan.md` content (this file replaces it).
+- The `lightyear` direct dep on `aidenstern/lightyear`.
+- The `bevy_transform_interpolation` patch.
+- The `client`/`server`/`networking`/`serialize` Cargo feature scaffolding (simplified — see §3).
 
-## 2. Library `src/networking.rs` extension
+### 2. Use `baszalmstra/lightyear` (not `aidenstern/lightyear`)
 
-Existing prediction registrations (`Position`, `Rotation`, `LinearVelocity`, `CharacterLook`) stay. Add:
+`lightyear_ahoy` was built against `baszalmstra/lightyear@9f90deca6`. We must use the same lightyear or we get type incompatibilities (different `LightyearAvianPlugin`, different `InputPlugin`, etc.). We will:
+- Point `Cargo.toml` directly at `baszalmstra/lightyear` at the same rev.
+- Leave `aidenstern/lightyear` alone for now. If we ever need bevy_ahoy-specific lightyear changes, we can fork `baszalmstra` instead.
 
-- bei plugin per InputContext (one per context type):
+### 3. Camera/look semantics: adopt the `networked` branch's pattern
+
+andriyDev's `networked` branch made one subtle but important change to `bevy_ahoy`'s camera layer that our fork hasn't picked up yet:
+
+| | This fork (now) | `andriyDev/networked` |
+|-|---|---|
+| `rotate_camera` writes to | KCC `Transform.rotation` **and** camera `Transform.rotation` | camera `Transform.rotation` only |
+| `spin_*` (platform spin) writes to | `Transform.rotation` (`spin_kcc`) | `CharacterLook` (`spin_character_look`) |
+| Camera follows | KCC yaw via `copy_kcc_yaw_to_camera` (in `RunFixedMainLoop`) | `CharacterLook` via `copy_character_look_to_camera` (in `Update` + `PostUpdate`) |
+| `AhoySystems::UpdateCameras` | does not exist | exists; camera-sync systems run inside it in `PostUpdate` |
+
+`lightyear_ahoy::avian::SimpleAvianSetupPlugin` chains:
+```
+PostUpdate: (RollbackSystems::VisualCorrection, FrameInterpolationSystems::Interpolate) → AhoySystems::UpdateCameras
+```
+so camera updates run **after** interpolation/correction. That set must exist for the chain to compile.
+
+Plan: port the `networked` branch's camera + spin + AhoySystems changes wholesale into our fork. **Net behavioral effect**: the KCC body Transform's yaw stops mirroring the camera. There is no body mesh in this POC, so this is invisible. If we later add a body mesh we re-derive its yaw from `CharacterLook` (one new system).
+
+### 4. bei is client-side only; lightyear's native `InputPlugin` is the wire format
+
+- `bevy_enhanced_input` (bei) maps physical input → `Fire<Action>` events on the client.
+- Existing `apply_*` observers in `src/input.rs` translate `Fire<Action>` events into `AccumulatedInput` mutations on the client's local player. **Unchanged.**
+- `lightyear_ahoy::protocol::ProtocolPlugin` registers `InputPlugin::<AccumulatedInput>` and `InputPlugin::<CharacterLook>`. These replicate the input components client → server as `ActionState<…>`.
+- `lightyear_ahoy::client::ClientPlugin` copies `AccumulatedInput → ActionState` (write side, on the local player only) and copies `ActionState → AccumulatedInput` during rollback (so re-simulation reads the buffered tick's input). Same for `CharacterLook`.
+- `lightyear_ahoy::server::ServerPlugin` copies `ActionState → AccumulatedInput` for remote players (so the KCC's normal input read still works).
+- The server **never** runs bei. `EnhancedInputPlugin` and the `PlayerInput` bei context Component go on the **client only**.
+
+### 5. The kcc/grounded entity ref problem — already solved by `lightyear_ahoy`
+
+`CharacterControllerState.grounded: Option<MoveHitData>` contains an `Entity` ref to the ground collider. Across server↔client this is a different `Entity` value, but lightyear's `MapEntities` rewrites it. We already derive `MapEntities` on `CharacterControllerState`.
+
+The remaining issue (per andriyDev's note): if the rolled-back state's grounded entity doesn't exist client-side, lightyear's default `should_rollback` would mismatch and force unnecessary rollback. Solution: `lightyear_ahoy::protocol::character_controller_state_should_rollback` ignores the entity ref entirely — only compares `is_some` plus the scalar fields. So replicated grounded data is "advisory" for the client; client recomputes the ground entity from its own physics during rollback. Acceptable for a POC.
+
+### 6. Throw away the structural-prep `notes/`
+
+`notes/networking-plan.md` (this file) replaces the old one. Drop the references to `~/.claude/plans/floating-watching-kurzweil.md` and `~/dev/bevy/bevy_game/`.
+
+## Implementation phases
+
+### Phase 1 — Library API changes (`my_bevy_ahoy_fork/bevy_ahoy/src/`)
+
+Goal: bring the lib's surface into agreement with what `lightyear_ahoy` expects (the API of `andriyDev/bevy_ahoy@1ac0fed`).
+
+#### 1a. `lib.rs`
+- Add `UpdateCameras` to the `AhoySystems` enum:
   ```rust
-  app.add_plugins(lightyear::input::bei::InputPlugin::<PlayerInput> {
-      config: lightyear::input::config::InputConfig {
-          rebroadcast_inputs: true,
-          ..default()
-      },
-  });
+  pub enum AhoySystems {
+      MoveCharacters,
+      ApplyForcesToDynamicRigidBodies,
+      UpdateCameras,
+  }
   ```
-- `register_input_action::<A>()` for every kept Action: `Movement`, `Jump`, `RotateCamera`, `Crouch`, `Mantle`, `Tac`, `Crane`, `Climbdown`, `SwimUp`.
-- Component registrations:
-  ```rust
-  app.register_component::<CharacterController>()
-      .add_prediction()
-      .add_should_rollback(controller_should_rollback);
-  app.register_component::<AccumulatedInput>().add_prediction();
-  app.register_component::<CharacterControllerState>().add_prediction();
-  app.register_component::<CharacterControllerDerivedProps>(); // no prediction; set up by setup_collider
-  app.register_component::<CharacterControllerOutput>().add_prediction();
-  app.register_component::<WaterState>().add_prediction(); // no-op in practice; kcc reads it
-  app.register_component::<LogicalPlayer>().add_prediction();
-  app.register_component::<PlayerId>();
-  ```
-  Write `controller_should_rollback` to compare only the few fields the kcc actually mutates each tick (height, ground_tick analogues, etc.) — see `~/dev/bevy/bevy_game/src/net/mod.rs:22-26` for shape.
-- Pre-register `PlayerInput` (the bei InputContext Component) for replication:
-  ```rust
-  app.register_component::<PlayerInput>();
-  ```
-  This requires `PlayerInput` to derive `Serialize, Deserialize, Reflect, Clone, Debug, PartialEq` (currently just `Component, Default`).
-- Disable Avian plugins per the lightyear pattern (replaces the `PhysicsPlugins::default()` line in `game::run`):
-  ```rust
-  app.add_plugins(lightyear::avian3d::plugin::LightyearAvianPlugin {
-      replication_mode: AvianReplicationMode::Position,
-      ..default()
-  });
-  app.add_plugins(
-      PhysicsPlugins::default()
-          .build()
-          .disable::<PhysicsTransformPlugin>()
-          .disable::<PhysicsInterpolationPlugin>()
-          .disable::<IslandPlugin>()
-          .disable::<IslandSleepingPlugin>(),
-  );
-  ```
+- No other lib.rs changes — `CharacterController`, `CharacterControllerState`, `CharacterLook`, etc. already match.
 
-## 3. Server module (`src/game/server.rs`)
+#### 1b. `camera.rs`
+Port from `andriyDev/networked@1ac0fed:src/camera.rs`. Key diffs:
+- `rotate_camera` and `yank_camera` write to camera `Transform.rotation` only, not KCC `Transform.rotation`.
+- New `snap_camera_position_to_kcc_on_add` and `snap_camera_rotation_to_kcc_on_add` observers (so a camera added to an already-existing KCC immediately syncs).
+- Drop `copy_kcc_yaw_to_camera` (the user-fork addition that mirrored kcc.Transform.yaw → camera.Transform.yaw).
+- Move `copy_character_look_to_camera` and `sync_camera_transform` to `PostUpdate` inside `AhoySystems::UpdateCameras`, which is configured `before(TransformSystems::Propagate)`.
+- `CharacterControllerCameraOf::on_add` reads `Position`/`Rotation` from KCC (not just `Transform`) and snaps the camera transform to those.
 
+#### 1c. `kcc.rs`
+- Rename `spin_kcc` → `spin_character_look` and change its body to operate on `&mut CharacterLook` instead of `&mut Transform`. Direct port from `andriyDev/networked@1ac0fed:src/kcc.rs`.
+- The `AhoyKccPlugin::build` registration becomes:
+  ```rust
+  .add_systems(Update, (spin_character_look,))
+  ```
+- Update the camera.rs reference: `kcc::spin_character_look` (was `kcc::spin_kcc`).
+
+#### 1d. `networking.rs`
+**Delete this file.** lightyear plugin registration moves to `lightyear_ahoy::protocol::ProtocolPlugin`.
+
+Remove the `pub mod networking` line and the `pub use crate::networking::AhoyNetworkingPlugin` re-export from `lib.rs`.
+
+#### 1e. `Cargo.toml` (lib half)
+- Bump `avian3d = "0.6.0-rc.1"` → `"0.6.1"`. Verify `0.6.1` doesn't introduce compile errors in `kcc.rs` (likely fine — it's a patch bump).
+- Drop the `lightyear` direct dep.
+- Drop the `bevy_transform_interpolation` patch.
+- Simplify features:
+  - Keep `serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]`.
+  - Drop `networking`. Drop the `dep:lightyear` optional dep.
+
+The library no longer carries any lightyear knowledge directly — that all lives in `lightyear_ahoy`.
+
+### Phase 2 — Binary `Cargo.toml` and feature flags
+
+Treat `Cargo.toml` as having two halves: lib deps (above) and binary deps (here).
+
+#### 2a. Add deps
+```toml
+lightyear_ahoy = { path = "../../lightyear_ahoy" }
+lightyear = { git = "https://github.com/baszalmstra/lightyear.git", rev = "9f90deca6a23e7c98028d14c98f0961e4135902d", features = [
+    "avian3d",
+    "frame_interpolation",
+    "prediction",
+    "input_native",
+    "netcode",
+    "udp",
+    "client",
+    "server",
+] }
+```
+The `client`/`server`/`netcode`/`udp` features are needed to spawn the lightyear `Client`/`NetcodeServer`/`UdpIo` entities in our `host`/`client`/`server` boot code. `avian3d`, `prediction`, `input_native`, `frame_interpolation` are required by `lightyear_ahoy` itself.
+
+#### 2b. Patch lightyear_ahoy's bevy_ahoy ref to point at our fork
+```toml
+[patch."https://github.com/andriyDev/bevy_ahoy"]
+bevy_ahoy = { path = "." }
+```
+Without this, `lightyear_ahoy` would compile against `andriyDev/bevy_ahoy@1ac0fed` AND we'd compile against our local fork — two different `bevy_ahoy` crate instances, types wouldn't match. The patch forces lightyear_ahoy to use our fork.
+
+#### 2c. Drop the `aidenstern/lightyear` dep and `[patch.crates-io]` for bevy_transform_interpolation.
+
+#### 2d. Simplify features
+```toml
+[features]
+default = ["client", "server"]   # host-client mode
+client = []                       # gates per-mode binary code
+server = []
+```
+Drop `networking` and `serialize` from the binary. The lib still has `serialize`; we propagate as `bevy_ahoy/serialize` if we want it (lightyear_ahoy already requires it).
+
+Final binary feature math:
+```toml
+[features]
+default = ["client", "server"]
+client = ["bevy_ahoy/serialize"]
+server = ["bevy_ahoy/serialize"]
+```
+
+The `compile_error!` in `src/game/mod.rs` (zero-feature build fails) stays.
+
+### Phase 3 — Game wiring (`src/game/`)
+
+#### 3a. `mod.rs` — App construction
+Per andriyDev's instructions, all four `lightyear_ahoy` plugins are added unconditionally (in any mode):
+```rust
+app.add_plugins((
+    lightyear_ahoy::avian::SimpleAvianSetupPlugin,
+    lightyear_ahoy::protocol::ProtocolPlugin,
+    lightyear_ahoy::client::ClientPlugin,
+    lightyear_ahoy::server::ServerPlugin,
+));
+```
+Replace the existing `PhysicsPlugins::default()` with the disabled-subplugin variant per andriy:
+```rust
+PhysicsPlugins::default()
+    .build()
+    .disable::<PhysicsTransformPlugin>()
+    .disable::<PhysicsInterpolationPlugin>(),
+```
+
+Per-mode plugin sets:
+- **server-only build**: drop `DefaultPlugins`'s render/window/audio bits — use `MinimalPlugins` + `TransformPlugin` + `AssetPlugin` + `ImagePlugin` + `MeshPlugin` + `ScenePlugin` + `StatesPlugin` + `GltfPlugin` + `init_asset::<StandardMaterial>()`. Drop `MipmapGeneratorPlugin`, `FramepacePlugin`, `EnhancedInputPlugin`, `BindingsPlugin`, `DebugPlugin`, `CursorPlugin`, `VisualsPlugin`, `SetupPlugin`. Keep `ScenePlugin` (game scene), `PlayerPlugin`, `AhoyPlugins`, the four lightyear_ahoy plugins, `ServerPlugin` (our binary's, see 3c), and a `Startup` system that boots a `NetcodeServer` and triggers `Start`.
+- **client-only build**: keep `DefaultPlugins`, `EnhancedInputPlugin`, all visual plugins. Drop `SetupPlugin` (no local spawn). Add our `ClientPlugin` (3d) and a `Startup` system that boots a lightyear `Client` and triggers `Connect`.
+- **host-client (default)**: same as client-only plus `ServerPlugin` and `HostPlugin` (3e). Drop `SetupPlugin`. Local player gets created via the host-client connect flow.
+
+The mode-dispatch in `mod.rs` already exists; we just fill in the per-mode plugins and Startup systems.
+
+#### 3b. `bindings.rs` — strip the on_add hook
+- Remove `#[component(on_add = PlayerInput::on_add)]` on `PlayerInput`.
+- Move the `actions!(...)` call from `PlayerInput::on_add` into `client::setup_local_player` (3d).
+- `PlayerInput` becomes `#[derive(Component, Default)] pub struct PlayerInput;`.
+- `BindingsPlugin` still calls `app.add_input_context::<PlayerInput>();`.
+
+#### 3c. `server.rs` — implement `ServerPlugin`
 ```rust
 use std::time::Duration;
+use avian3d::prelude::*;
 use bevy::prelude::*;
+use bevy_ahoy::prelude::*;
 use lightyear::prelude::server::*;
 use lightyear::prelude::*;
 use crate::game::player::{LogicalPlayer, PlayerId, CollisionLayer};
-use crate::game::bindings::PlayerInput;
 use crate::game::scene::SPAWN_POINT;
 
 const SEND_INTERVAL: Duration = Duration::from_millis(100);
@@ -97,8 +216,6 @@ impl Plugin for ServerPlugin {
     }
 }
 
-// Per-client `LinkOf` entity: needs a sender (replicate state down) AND a
-// receiver (bei Action entities are replicated UP from the client).
 fn handle_new_link(trigger: On<Add, LinkOf>, mut commands: Commands) {
     commands.entity(trigger.entity).insert((
         ReplicationSender::new(SEND_INTERVAL, SendUpdatesMode::SinceLastAck, false),
@@ -114,32 +231,25 @@ fn handle_connected(
 ) {
     let Ok(client_id) = query.get(trigger.entity) else { return };
     let client_id = client_id.0;
-    info!("Client {client_id:?} connected, spawning LogicalPlayer");
-
     commands.spawn((
         LogicalPlayer,
         PlayerId(client_id.to_bits()),
-        Transform::from_translation(SPAWN_POINT),
-        // physics bundle
-        avian3d::prelude::CollisionLayers::new(CollisionLayer::Player, avian3d::prelude::LayerMask::ALL),
-        bevy_ahoy::prelude::CharacterController::default(),
-        avian3d::prelude::RigidBody::Kinematic,
-        avian3d::prelude::Collider::cylinder(0.7, 1.8),
-        avian3d::prelude::Mass(90.0),
-        // bei InputContext component (NO actions / NO bindings — client attaches those)
-        PlayerInput,
-        // lightyear replication
+        Position(SPAWN_POINT),
+        Rotation::default(),
+        CharacterLook::default(),
+        CharacterController::default(),
+        RigidBody::Kinematic,
+        Collider::cylinder(0.7, 1.8),
+        Mass(90.0),
+        CollisionLayers::new(CollisionLayer::Player, LayerMask::ALL),
         Replicate::to_clients(NetworkTarget::All),
         PredictionTarget::to_clients(NetworkTarget::Single(client_id)),
         InterpolationTarget::to_clients(NetworkTarget::AllExceptSingle(client_id)),
         ControlledBy { owner: trigger.entity, lifetime: Default::default() },
     ));
 }
-```
 
-For the dedicated server boot:
-```rust
-fn start_dedicated_server(mut commands: Commands, bind_addr: SocketAddr) {
+pub fn start_dedicated_server(mut commands: Commands, bind_addr: SocketAddr) {
     let server = commands.spawn((
         lightyear::netcode::NetcodeServer::new(NetcodeConfig::default()),
         LocalAddr(bind_addr),
@@ -148,22 +258,22 @@ fn start_dedicated_server(mut commands: Commands, bind_addr: SocketAddr) {
     commands.trigger(Start { entity: server });
 }
 ```
-Wire it in `game::run`'s `Some(Mode::Server { bind_addr })` branch as a `Startup` system that captures `bind_addr`.
+The `respawn_below_floor` system already exists in `src/game/player.rs` and works server-side automatically once the server is the one moving the player.
 
-The respawn-below-floor system already exists in `src/game/player.rs` and queries `With<LogicalPlayer>` → it works server-side automatically once the server is the one moving the player.
-
-## 4. Client module (`src/game/client.rs`)
-
+#### 3d. `client.rs` — implement `ClientPlugin`
 ```rust
-use std::time::Duration;
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, time::Duration};
 use bevy::prelude::*;
-use lightyear::prelude::client::*;
-use lightyear::prelude::*;
-use lightyear::input::bei::prelude::{Action, ActionOf, Bindings, Cardinal};
-use bevy_enhanced_input::prelude::{Press, Hold, *};
-use crate::game::player::{LogicalPlayer, PlayerId, RenderPlayer};
-use crate::game::bindings::PlayerInput;
 use bevy_ahoy::prelude::*;
+use bevy_enhanced_input::prelude::{Press, Hold, *};
+use lightyear::prelude::*;
+use lightyear::prelude::client::*;
+use lightyear::prelude::input::native::{InputMarker};
+use lightyear::input::native::ActionState;
+use crate::game::{
+    bindings::PlayerInput,
+    player::{LogicalPlayer, PlayerId, RenderPlayer},
+};
 
 const SEND_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -183,36 +293,34 @@ fn setup_local_player(
 ) {
     for (entity, controlled) in &new_local {
         if !controlled { continue; }
-        info!("Setting up local controlled player on {entity:?}");
-
-        // Attach bei actions ONLY on the client side (server never has bindings).
-        // Replaces the `PlayerInput::on_add` hook in src/game/bindings.rs — that
-        // hook should be removed during the networking phase.
-        commands.entity(entity).insert(actions!(PlayerInput[
-            (Action::<Movement>::new(), DeadZone::default(),
-             Bindings::spawn((Cardinal::wasd_keys(), Axial::left_stick()))),
-            (Action::<Jump>::new(), Press::default(),
-             bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
-            (Action::<Tac>::new(), Press::default(),
-             bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
-            (Action::<Crane>::new(), Press::default(),
-             bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
-            (Action::<Mantle>::new(), Hold::new(0.2),
-             bindings![KeyCode::Space, GamepadButton::South]),
-            (Action::<Climbdown>::new(),
-             bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger2]),
-            (Action::<Crouch>::new(),
-             bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger2]),
-            (Action::<RotateCamera>::new(),
-             Bindings::spawn((
-                 Spawn((Binding::mouse_motion(), Scale::splat(0.07))),
-                 Axial::right_stick().with((Scale::splat(4.0), DeadZone::default())),
-             ))),
-        ]));
-
-        // Spawn camera + RenderPlayer link. The existing `tweak_camera` observer
-        // (in src/game/visuals.rs) attaches Atmosphere/Bloom/Exposure/EnvMap on
-        // Insert<Camera3d>, so post-processing is automatic.
+        // Tag the entity as "this is the locally-driven input" so lightyear's
+        // input layer reads our AccumulatedInput / CharacterLook into ActionState.
+        commands.entity(entity).insert((
+            PlayerInput,
+            InputMarker::<AccumulatedInput>::default(),
+            InputMarker::<CharacterLook>::default(),
+            actions!(PlayerInput[
+                (Action::<Movement>::new(), DeadZone::default(),
+                 Bindings::spawn((Cardinal::wasd_keys(), Axial::left_stick()))),
+                (Action::<Jump>::new(), Press::default(),
+                 bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
+                (Action::<Tac>::new(), Press::default(),
+                 bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
+                (Action::<Crane>::new(), Press::default(),
+                 bindings![KeyCode::Space, GamepadButton::South, Binding::mouse_wheel()]),
+                (Action::<Mantle>::new(), Hold::new(0.2),
+                 bindings![KeyCode::Space, GamepadButton::South]),
+                (Action::<Climbdown>::new(),
+                 bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger2]),
+                (Action::<Crouch>::new(),
+                 bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger2]),
+                (Action::<RotateCamera>::new(),
+                 Bindings::spawn((
+                     Spawn((Binding::mouse_motion(), Scale::splat(0.07))),
+                     Axial::right_stick().with((Scale::splat(4.0), DeadZone::default())),
+                 ))),
+            ]),
+        ));
         commands.spawn((
             Camera3d::default(),
             CharacterControllerCameraOf::new(entity),
@@ -223,16 +331,15 @@ fn setup_local_player(
 
 fn setup_remote_player(
     mut commands: Commands,
-    new_remote: Query<Entity, (
-        With<Interpolated>, With<avian3d::prelude::Position>,
-        With<avian3d::prelude::Rotation>, Without<RemotePlayerInitialized>,
-    )>,
+    new_remote: Query<
+        (Entity, &PlayerId),
+        (With<Interpolated>, With<LogicalPlayer>, Without<RemotePlayerInitialized>),
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    ids: Query<&PlayerId>,
 ) {
-    for entity in &new_remote {
-        let hue = ids.get(entity).map(|p| ((p.0 * 137) % 360) as f32).unwrap_or(0.0);
+    for (entity, player_id) in &new_remote {
+        let hue = ((player_id.0 * 137) % 360) as f32;
         commands.entity(entity).insert((
             Mesh3d(meshes.add(Cylinder::new(0.7, 1.8))),
             MeshMaterial3d(materials.add(StandardMaterial {
@@ -243,13 +350,11 @@ fn setup_remote_player(
         ));
     }
 }
-```
 
-For the client connection boot:
-```rust
-fn start_client(mut commands: Commands, client_id: u64, server_addr: SocketAddr) {
+pub fn start_client(mut commands: Commands, client_id: u64, server_addr: SocketAddr) {
     let auth = Authentication::Manual {
-        server_addr, client_id,
+        server_addr,
+        client_id,
         private_key: lightyear::netcode::Key::default(),
         protocol_id: 0,
     };
@@ -259,108 +364,99 @@ fn start_client(mut commands: Commands, client_id: u64, server_addr: SocketAddr)
         PeerAddr(server_addr),
         Link::new(None),
         ReplicationReceiver::default(),
-        // Required: bei Action entities replicate UP from client to server.
         ReplicationSender::new(SEND_INTERVAL, SendUpdatesMode::SinceLastAck, false),
         lightyear::netcode::NetcodeClient::new(auth, NetcodeConfig::default()).unwrap(),
         UdpIo::default(),
-        // Tune input delay; start at 0, raise to ~10 if jitter is bad.
-        InputTimelineConfig::default()
-            .with_input_delay(InputDelayConfig::fixed_input_delay(0)),
     )).id();
     commands.trigger(Connect { entity: client });
 }
 ```
-Wire it in `game::run`'s `Some(Mode::Client { client_id, server_addr })` branch as a `Startup` system.
 
-## 5. Bindings module changes (`src/game/bindings.rs`)
-
-- Remove `#[component(on_add = PlayerInput::on_add)]` from `PlayerInput`. Reason: the on_add hook fires on the server when it spawns the context Component, and on the server we don't want bei to attempt to read physical input or attach bindings.
-- Move the `actions!` macro invocation from `PlayerInput::on_add` into client-side `setup_local_player` (above).
-- Change the derive on `PlayerInput`:
-  ```rust
-  #[derive(Component, Default, Reflect, Clone, Debug, PartialEq)]
-  #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-  #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
-  #[reflect(Component)]
-  pub struct PlayerInput;
-  ```
-
-## 6. Host-client wiring (`src/game/host.rs`)
-
-Mirror bevy_game's `setup_host_server` (`~/dev/bevy/bevy_game/src/main.rs:212-254`):
-
+#### 3e. `host.rs` — implement `HostPlugin`
 ```rust
-fn setup_host_server(app: &mut App) {
-    let server = app.world_mut().spawn((
-        lightyear::netcode::NetcodeServer::new(NetcodeConfig::default()),
-        LocalAddr(DEFAULT_SERVER_ADDR),
-        ServerUdpIo::default(),
-    )).id();
-    let client = app.world_mut().spawn((
-        Client::default(),
-        Name::new("HostClient"),
-        LinkOf { server }, // shares process link, no UDP
-    )).id();
-    // CRITICAL: server must `Started` before client `Connect`s.
-    app.add_systems(Startup, (
-        move |mut c: Commands| { c.trigger(Start { entity: server }); },
-        move |mut c: Commands| { c.trigger(Connect { entity: client }); },
-    ).chain());
+use bevy::prelude::*;
+use lightyear::prelude::*;
+use lightyear::prelude::server::*;
+
+pub const DEFAULT_HOST_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000);
+
+pub struct HostPlugin;
+impl Plugin for HostPlugin {
+    fn build(&self, app: &mut App) {
+        let server = app.world_mut().spawn((
+            lightyear::netcode::NetcodeServer::new(NetcodeConfig::default()),
+            LocalAddr(DEFAULT_HOST_BIND),
+            ServerUdpIo::default(),
+            Name::new("HostServer"),
+        )).id();
+        let client = app.world_mut().spawn((
+            Client::default(),
+            Name::new("HostClient"),
+            LinkOf { server },        // shares process link, no UDP
+        )).id();
+        app.add_systems(Startup, (
+            move |mut c: Commands| { c.trigger(Start { entity: server }); },
+            move |mut c: Commands| { c.trigger(Connect { entity: client }); },
+        ).chain());
+    }
 }
 ```
-`HostPlugin::build` calls `setup_host_server(app)`.
 
-## 7. game::run dispatch updates
+#### 3f. `setup.rs`
+Delete. The local player no longer spawns from a `OnEnter(GameState::InGame)` system — it's spawned by `server::handle_connected` and the host-client receives it via prediction.
 
-Per-mode bevy plugin sets (currently all use `DefaultPlugins`):
-- `Some(Mode::Server { bind_addr })`: swap `DefaultPlugins` → `MinimalPlugins` + `TransformPlugin`/`AssetPlugin`/`bevy::image::ImagePlugin`/`bevy::mesh::MeshPlugin`/`bevy::scene::ScenePlugin`/`bevy::state::app::StatesPlugin`/`bevy::gltf::GltfPlugin` + `init_asset::<StandardMaterial>()`. Drop `MipmapGeneratorPlugin`, `FramepacePlugin`, `EnhancedInputPlugin`, `DebugPlugin`, `CursorPlugin`, `VisualsPlugin`, `BindingsPlugin`, `SetupPlugin` (no local spawn). Keep `ScenePlugin`, `PlayerPlugin`, `AhoyPlugins`, `PhysicsPlugins` (with disabled subplugins per §2). Add `ServerPlugin` + a `Startup` system calling `start_dedicated_server(bind_addr)`.
-- `Some(Mode::Client { client_id, server_addr })`: keep `DefaultPlugins` + visual plugins + `EnhancedInputPlugin`. Drop `SetupPlugin` (the client gets its player via replication, not local spawn). Add `ClientPlugin` + a `Startup` system calling `start_client(client_id, server_addr)`.
-- `None` (host-client): keep current setup. Add `ServerPlugin` + `ClientPlugin` + `HostPlugin`. **Drop `SetupPlugin`** here too — the local player is spawned via the host-server flow (server's `handle_connected` triggers spawn, host-client receives via prediction).
+Remove `SetupPlugin` from `mod.rs`'s plugin list.
 
-In all modes, also add `AhoyNetworkingPlugin` (the lib's networking plugin) when `feature = "networking"` is on.
+#### 3g. `player.rs`
+- `LogicalPlayer`, `PlayerId`, `RenderPlayer`, `CollisionLayer`, `respawn_below_floor` — keep as-is.
+- Add `LogicalPlayer` to lightyear's component registry. We can do that in our own per-binary registration helper, OR rely on `Replicate::to_clients` to register on first spawn. Confirm during implementation; if it doesn't auto-register, add an `app.register_component::<LogicalPlayer>().add_prediction()` call in our binary's `ClientPlugin`/`ServerPlugin` (NOT in the lib).
+- Same for `PlayerId`.
 
-## 8. Camera-look replication
+#### 3h. `cli.rs`, `cursor.rs`, `debug.rs`, `visuals.rs`, `scene.rs`
+No changes.
 
-The current `CharacterLook` is computed client-side (camera transform → CharacterLook in `lib/src/camera.rs:147`). For server-authoritative play, two options:
-
-- **(a)** Keep the client-side computation, add a "client→server" replication direction for `CharacterLook`. Simpler if lightyear supports it cleanly.
-- **(b) (recommended)** Treat camera rotation as input: the existing `RotateCamera` bei action with Vec2 output already fires on mouse motion. Have the client *not* directly mutate the camera transform; instead, the bei action sends Vec2 deltas to the server, which accumulates yaw/pitch into `CharacterLook` server-side. Predicted clients also accumulate locally. The camera transform is then derived from `CharacterLook` (already done by `copy_character_look_to_camera` in `lib/src/camera.rs`).
-
-Option (b) keeps all gameplay state server-authoritative and matches the lightyear input model.
-
-## 9. Schedule alignment
-
-`AhoyPlugins::default()` runs the kcc in `FixedPostUpdate`. Lightyear's prediction rollback re-runs `FixedFirst` through `FixedLast` (verify in lightyear source). If `FixedPostUpdate` is excluded for some reason, switch via `AhoyPlugins::new(FixedUpdate)` in `game::run`.
-
-## 10. Open questions for execution
-
-- `CharacterControllerState` contains `Stopwatch` (Duration-backed; serialize OK) and `Option<MoveHitData>` (has `Entity` ref → needs `MapEntities` impl on registration).
-- The lightyear fork (`aidenstern/lightyear` @ `avian-0.6`) — verify it's still building and the `input_bei` feature still exists in the version pulled by `Cargo.lock`.
-- `PlayerInput` as both a bei-context Component AND a lightyear-replicated Component — verify there's no conflict (the lightyear bei InputPlugin probably handles the dual role; cross-check the `bevy_enhanced_inputs` example in lightyear).
-- `CollisionLayer` enum (in `src/game/player.rs`) won't replicate as-is (PhysicsLayer derive). Verify this doesn't break replication; it's only used at spawn time so should be fine.
-
-## 11. Verification sequence (after networking lands)
+### Phase 4 — Verify
 
 ```
-just check-all                     # all feature combos
-just smoke-test                    # host-client 300 frames
+cd my_bevy_ahoy_fork/bevy_ahoy
+cargo check                                 # default = host-client
+cargo check --no-default-features --features client
+cargo check --no-default-features --features server
+just lint                                    # cargo clippy -D warnings
+just smoke-test                              # 300 frames host-client, exits 0
 
-# Two-terminal real test:
-cargo run --no-default-features --features server -- server
-# (in another terminal)
-cargo run --no-default-features --features client -- client --client-id 1
-# Expected: client window shows player, WASD/mouse moves it,
-# server logs `Client connected, spawning LogicalPlayer`.
+# Two terminals:
+just run-server                              # listens on 0.0.0.0:5000
+just run-client --client-id 1 --server-addr 127.0.0.1:5000   # window opens, WASD moves player
 
-# Multi-client smoke:
-# Same as above plus a second client with --client-id 2 — both clients should
-# see each other as colored cylinders.
+# Three terminals (multi-client):
+just run-server
+just run-client --client-id 1
+just run-client --client-id 2
+# Both clients should see each other as colored cylinders.
 ```
 
-## 12. References
+### Phase 5 — Update `CLAUDE.md`
 
-- https://github.com/aidenstern/lightyear/tree/avian-0.6/examples/avian_3d_character (avian + leafwing pattern)
-- https://github.com/aidenstern/lightyear/tree/avian-0.6/examples/bevy_enhanced_inputs (bei integration pattern)
-- https://github.com/aidenstern/lightyear/tree/avian-0.6/lightyear_inputs_bei/src (bei integration internals — `setup.rs`, `marker.rs`, `input_message.rs`)
-- `~/dev/bevy/bevy_game/src/{main,client,server}.rs` (working leafwing reference with LogicalPlayer/RenderPlayer split)
-- `~/dev/bevy/bevy_game/CLAUDE.md` (architecture doc that mirrors what bevy_ahoy will look like)
+Replace the "What's done vs what's next" + "Networking architecture" sections to reflect the new lightyear_ahoy-based reality. Drop references to `~/dev/bevy/bevy_game/`, `aidenstern/lightyear`, and the bei-driven replication plan. Add a short "How replication actually works" section pointing at lightyear_ahoy.
+
+## Open questions / things to verify during implementation
+
+1. **`avian3d` 0.6.0-rc.1 → 0.6.1 compile**: a patch bump but pre-1.0 sometimes breaks. If it does, we either patch our kcc.rs or pin lightyear_ahoy to the same `0.6.0-rc.1` (would require modifying lightyear_ahoy locally — its `path = ` dep gives us that option).
+
+2. **`MapEntities` derive on `AccumulatedInput`/`CharacterLook` from inside the lightyear input pipeline**: the input replication path may or may not call `MapEntities`. `CharacterLook` has no Entity refs so it's fine; `AccumulatedInput` similarly has none.
+
+3. **Server collider hierarchy on `MapRoot`**: `add_map_colliders` queries meshes loaded into `Assets<Mesh>`. On a `MinimalPlugins` server we need `bevy_gltf::GltfPlugin` AND `MeshPlugin` AND `ScenePlugin` in the plugin list, otherwise the GLB won't hydrate. Verify which subset is actually needed.
+
+4. **`PhysicsTransformPlugin` and `PhysicsInterpolationPlugin` disable**: confirm these are still the right plugins to disable on this avian + lightyear combo (lightyear_ahoy README/comments will say). The `lightyear_ahoy::avian::SimpleAvianSetupPlugin` already adds `LightyearAvianPlugin` and `FrameInterpolationPlugin::<Transform>`, so we just need to disable the avian-side equivalents.
+
+5. **`LogicalPlayer`/`PlayerId` registration**: do they need explicit `register_component` calls, or does `Replicate::to_clients` on first spawn handle it? If explicit needed, where — in the lib or in the game binary?
+
+6. **`InputMarker<AccumulatedInput>`/`InputMarker<CharacterLook>`**: confirm the lightyear native InputPlugin spawns these on the local player automatically, or whether `setup_local_player` has to add them (the snippet above adds them defensively; remove if redundant).
+
+7. **`Cargo.lock` lightyear unification**: lightyear_ahoy will pull `baszalmstra/lightyear@9f90deca6` from its own `Cargo.toml`. Our binary depends directly on `baszalmstra/lightyear@9f90deca6`. Cargo should de-dup these because the git rev matches. Verify with `cargo tree -d` after the first build.
+
+## Reference files (already cloned locally)
+
+- `~/dev/bevy/bevy_ahoy_testing/lightyear_ahoy/src/{avian,protocol,client,server}.rs` — the integration we're consuming.
+- `~/dev/bevy/bevy_ahoy_testing/bevy_ahoy/src/{lib,camera,kcc,input}.rs` (on `networked` branch) — the source code we're porting `AhoySystems::UpdateCameras` and `spin_character_look` from.

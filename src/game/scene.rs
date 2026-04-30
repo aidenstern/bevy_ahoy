@@ -14,10 +14,12 @@ pub struct ScenePlugin;
 
 impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_map).add_systems(
-            Update,
-            add_map_colliders.run_if(in_state(GameState::Loading)),
-        );
+        app.add_systems(Startup, load_map)
+            .add_systems(
+                Update,
+                add_map_colliders.run_if(in_state(GameState::Loading)),
+            )
+            .add_systems(OnEnter(GameState::InGame), || info!("Scene ready: GameState::InGame"));
     }
 }
 

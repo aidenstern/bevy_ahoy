@@ -15,6 +15,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use lightyear::prelude::AppComponentExt;
 
 use crate::game::{GameState, scene::SPAWN_POINT};
 
@@ -33,14 +34,14 @@ pub struct LogicalPlayer;
 pub struct PlayerId(pub u64);
 
 /// Camera-side marker that ties a render entity (with `Camera3d`) to its
-/// authoritative [`LogicalPlayer`]. Client-only. Unused until the networking
-/// phase wires `setup_local_player` (see `notes/networking-plan.md`).
-#[allow(
-    dead_code,
-    reason = "Reserved for the networking phase; kept here so the type exists when client.rs gets fleshed out."
-)]
+/// authoritative [`LogicalPlayer`]. Client-only.
+#[cfg(feature = "client")]
 #[derive(Component)]
 pub struct RenderPlayer {
+    #[expect(
+        dead_code,
+        reason = "RenderPlayer is currently a marker pointing at its LogicalPlayer; the field is read by future per-player render systems."
+    )]
     pub logical_entity: Entity,
 }
 
@@ -57,10 +58,16 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LogicalPlayer>()
             .register_type::<PlayerId>()
-            .add_systems(
-                Update,
-                respawn_below_floor.run_if(in_state(GameState::InGame)),
-            );
+            // Both LogicalPlayer and PlayerId need to be registered with lightyear
+            // so they are sent over the wire when the server spawns a player. Without
+            // this, the client only sees Position/Rotation/etc and the marker filters
+            // (`With<LogicalPlayer>`) in `setup_local_player` never match.
+            .register_component::<LogicalPlayer>();
+        app.register_component::<PlayerId>();
+        app.add_systems(
+            Update,
+            respawn_below_floor.run_if(in_state(GameState::InGame)),
+        );
     }
 }
 

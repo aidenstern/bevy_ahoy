@@ -27,9 +27,6 @@ pub mod prelude {
             Tac, YankCamera,
         },
     };
-
-    #[cfg(feature = "networking")]
-    pub use crate::networking::AhoyNetworkingPlugin;
 }
 
 pub use crate::{
@@ -52,8 +49,6 @@ mod dynamics;
 mod fixed_update_utils;
 pub mod input;
 mod kcc;
-#[cfg(feature = "networking")]
-pub mod networking;
 mod water;
 
 /// Plugin group for Ahoy's internal plugins.
@@ -122,6 +117,7 @@ impl Plugin for AhoySchedulePlugin {
 pub enum AhoySystems {
     MoveCharacters,
     ApplyForcesToDynamicRigidBodies,
+    UpdateCameras,
 }
 
 #[derive(Component, Clone, Reflect, PartialEq, Debug)]

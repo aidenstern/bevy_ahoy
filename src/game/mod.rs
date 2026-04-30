@@ -1,5 +1,6 @@
 //! Top-level game module: wires the App, owns [`GameState`], dispatches per-mode
-//! setup. The actual gameplay/input/render logic lives in the submodules.
+//! setup. Networking glue lives in [`networking`]; per-mode boot lives in
+//! [`server`] / [`client`] / [`host`].
 //!
 //! Single binary entry point lives at `src/main.rs`; it just calls [`run`].
 
@@ -9,7 +10,11 @@ compile_error!(
      (the default `[\"client\", \"server\"]` is host-client mode)"
 );
 
-use avian3d::prelude::PhysicsPlugins;
+use core::time::Duration;
+
+use avian3d::prelude::{
+    PhysicsInterpolationPlugin, PhysicsPlugins, PhysicsTransformPlugin,
+};
 use bevy::{
     image::{ImageAddressMode, ImageSamplerDescriptor},
     light::DirectionalLightShadowMap,
@@ -27,29 +32,26 @@ pub mod cli;
 pub mod client;
 pub mod cursor;
 pub mod debug;
+pub mod debug_net;
 #[cfg(all(feature = "client", feature = "server"))]
 pub mod host;
+pub mod networking;
 pub mod player;
 pub mod scene;
-pub mod setup;
 #[cfg(feature = "server")]
 pub mod server;
 pub mod visuals;
 
 use crate::game::{
     bindings::BindingsPlugin, cli::Cli, cursor::CursorPlugin, debug::DebugPlugin,
-    player::PlayerPlugin, scene::ScenePlugin, setup::SetupPlugin, visuals::VisualsPlugin,
+    player::PlayerPlugin, scene::ScenePlugin, visuals::VisualsPlugin,
 };
-
-#[cfg(feature = "client")]
-use crate::game::client::ClientPlugin;
-#[cfg(all(feature = "client", feature = "server"))]
-use crate::game::host::HostPlugin;
-#[cfg(feature = "server")]
-use crate::game::server::ServerPlugin;
 
 #[cfg(any(feature = "client", feature = "server"))]
 use crate::game::cli::Mode;
+
+/// Tick rate shared between client and server.
+const TICK_DURATION: Duration = Duration::from_millis(1000 / 60);
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum GameState {
@@ -67,12 +69,6 @@ pub fn run() -> AppExit {
 
     let mut app = App::new();
 
-    // Per-mode bevy plugin set.
-    //
-    // For the structural-prep round all three branches reuse the same gameplay
-    // wiring (full single-player setup) so the binary keeps working under any
-    // feature combination. The networking phase will swap server-mode to
-    // `MinimalPlugins`, drop the local player spawn from client mode, etc.
     match &cli.mode {
         #[cfg(feature = "server")]
         Some(Mode::Server { bind_addr }) => {
@@ -90,17 +86,29 @@ pub fn run() -> AppExit {
         }
     }
 
-    app.add_plugins((
-        DefaultPlugins
-            .set(WindowPlugin {
-                primary_window: Window {
-                    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
-                    present_mode: bevy::window::PresentMode::Mailbox,
-                    ..default()
-                }
-                .into(),
+    // Bevy + window plugins. Dedicated-server mode skips the primary window so
+    // it runs effectively headless (winit still initialises but never opens a
+    // window). Client and host-client modes get the full window/render stack.
+    let window_plugin = match &cli.mode {
+        #[cfg(feature = "server")]
+        Some(Mode::Server { .. }) => WindowPlugin {
+            primary_window: None,
+            exit_condition: bevy::window::ExitCondition::DontExit,
+            ..default()
+        },
+        _ => WindowPlugin {
+            primary_window: Window {
+                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
+                present_mode: bevy::window::PresentMode::Mailbox,
                 ..default()
-            })
+            }
+            .into(),
+            ..default()
+        },
+    };
+    app.add_plugins(
+        DefaultPlugins
+            .set(window_plugin)
             .set(ImagePlugin {
                 default_sampler: ImageSamplerDescriptor {
                     address_mode_u: ImageAddressMode::Repeat,
@@ -110,15 +118,44 @@ pub fn run() -> AppExit {
                     ..ImageSamplerDescriptor::linear()
                 },
             }),
-        PhysicsPlugins::default(),
-        EnhancedInputPlugin,
-        AhoyPlugins::default(),
+    );
+
+    // Avian: lightyear's avian glue replaces the transform/interpolation
+    // subplugins, so we disable them here.
+    app.add_plugins(
+        PhysicsPlugins::default()
+            .build()
+            .disable::<PhysicsTransformPlugin>()
+            .disable::<PhysicsInterpolationPlugin>(),
+    );
+
+    // Lightyear core plugin groups (per side).
+    #[cfg(feature = "client")]
+    app.add_plugins(lightyear::prelude::client::ClientPlugins {
+        tick_duration: TICK_DURATION,
+    });
+    #[cfg(feature = "server")]
+    app.add_plugins(lightyear::prelude::server::ServerPlugins {
+        tick_duration: TICK_DURATION,
+    });
+
+    // bevy_ahoy core + enhanced input.
+    app.add_plugins((EnhancedInputPlugin, AhoyPlugins::default()));
+
+    // Networking glue (vendored from lightyear_ahoy).
+    app.add_plugins((
+        networking::avian::SimpleAvianSetupPlugin,
+        networking::protocol::ProtocolPlugin,
+        networking::client::ClientPlugin,
+        networking::server::ServerPlugin,
+        debug_net::NetworkDebugPlugin,
+    ));
+
+    // Visual / input / scene plugins.
+    app.add_plugins((
         MipmapGeneratorPlugin,
         FramepacePlugin,
-    ))
-    .add_plugins((
         ScenePlugin,
-        SetupPlugin,
         PlayerPlugin,
         BindingsPlugin,
         DebugPlugin,
@@ -129,23 +166,30 @@ pub fn run() -> AppExit {
     .insert_resource(DirectionalLightShadowMap { size: 4096 })
     .insert_resource(GlobalAmbientLight::NONE);
 
-    // Per-mode networking plugins (stubs in this phase).
-    match &cli.mode {
+    // Per-mode game plugins + connection bootstrapping.
+    match cli.mode {
         #[cfg(feature = "server")]
-        Some(Mode::Server { .. }) => {
-            app.add_plugins(ServerPlugin);
+        Some(Mode::Server { bind_addr }) => {
+            app.add_plugins(server::ServerPlugin);
+            server::spawn_server(app.world_mut(), bind_addr);
+            app.add_systems(Startup, server::start_server);
         }
         #[cfg(feature = "client")]
-        Some(Mode::Client { .. }) => {
-            app.add_plugins(ClientPlugin);
+        Some(Mode::Client {
+            client_id,
+            server_addr,
+        }) => {
+            app.add_plugins(client::ClientPlugin);
+            client::spawn_client(app.world_mut(), client_id, server_addr);
+            app.add_systems(Startup, client::start_client);
         }
         None => {
             #[cfg(feature = "server")]
-            app.add_plugins(ServerPlugin);
+            app.add_plugins(server::ServerPlugin);
             #[cfg(feature = "client")]
-            app.add_plugins(ClientPlugin);
+            app.add_plugins(client::ClientPlugin);
             #[cfg(all(feature = "client", feature = "server"))]
-            app.add_plugins(HostPlugin);
+            app.add_plugins(host::HostPlugin);
         }
     }
 
