@@ -7,7 +7,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use bevy::prelude::*;
 use lightyear::prelude::*;
 
-use crate::game::{client, server};
+use crate::{client, server};
 
 pub const DEFAULT_HOST_BIND: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000);

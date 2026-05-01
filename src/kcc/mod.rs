@@ -1,8 +1,13 @@
-#![doc = include_str!("../readme.md")]
+//! First-person Source-style kinematic character controller. Forked from
+//! `janhohenheim/bevy_ahoy` and evolved for server-authoritative play.
 
-/// Everything you need to get started with `bevy_ahoy`
+/// Everything you need to get started with the KCC.
 pub mod prelude {
-    pub(crate) use {
+    // Bevy/avian re-exports are visible to kcc submodules (`use super::prelude::*`)
+    // but not to external code that imports `crate::kcc::prelude::*` — keeps the
+    // public surface clean and avoids name conflicts (e.g. bevy_app's `Start`
+    // shadowing lightyear's `Start` trigger).
+    pub(in crate::kcc) use {
         avian3d::prelude::*,
         bevy_app::prelude::*,
         bevy_derive::{Deref, DerefMut},
@@ -16,10 +21,10 @@ pub mod prelude {
     };
 
     // Water gameplay was removed during the server-authoritative migration prep,
-    // but kcc.rs still references the inert type definitions internally.
-    pub(crate) use crate::water::{Water, WaterLevel, WaterState};
+    // but controller.rs still references the inert type definitions internally.
+    pub(in crate::kcc) use super::water::{Water, WaterLevel, WaterState};
 
-    pub use crate::{
+    pub use super::{
         AhoyPlugins, AhoySystems, CharacterController, CharacterControllerState,
         camera::{CharacterControllerCamera, CharacterControllerCameraOf},
         input::{
@@ -29,15 +34,11 @@ pub mod prelude {
     };
 }
 
-pub use crate::{
-    camera::AhoyCameraPlugin, dynamics::AhoyDynamicPlugin,
-    fixed_update_utils::AhoyFixedUpdateUtilsPlugin, input::AhoyInputPlugin, kcc::AhoyKccPlugin,
+pub use self::{
+    camera::AhoyCameraPlugin, controller::AhoyKccPlugin, dynamics::AhoyDynamicPlugin,
+    fixed_update_utils::AhoyFixedUpdateUtilsPlugin, input::AhoyInputPlugin,
 };
-use crate::{
-    input::AccumulatedInput,
-    prelude::*,
-    water::WaterState,
-};
+use self::{input::AccumulatedInput, prelude::*, water::WaterState};
 use avian3d::character_controller::move_and_slide::MoveHitData;
 use bevy_app::PluginGroupBuilder;
 use bevy_ecs::{entity::MapEntities, intern::Interned, schedule::ScheduleLabel};
@@ -45,10 +46,10 @@ use bevy_time::Stopwatch;
 use core::time::Duration;
 
 pub mod camera;
+mod controller;
 mod dynamics;
 mod fixed_update_utils;
 pub mod input;
-mod kcc;
 mod water;
 
 /// Plugin group for Ahoy's internal plugins.
@@ -112,7 +113,7 @@ impl Plugin for AhoySchedulePlugin {
     }
 }
 
-/// System set used by all systems of `bevy_ahoy`.
+/// System set used by all kcc systems.
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum AhoySystems {
     MoveCharacters,

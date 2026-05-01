@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug, Default)]
-#[command(name = "bevy_ahoy")]
+#[command(name = "bevy_game")]
 pub struct Cli {
     #[command(subcommand)]
     pub mode: Option<Mode>,

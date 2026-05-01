@@ -1,30 +1,29 @@
-//! Client-side gameplay plugin: turns server-spawned `LogicalPlayer` entities
-//! into something playable.
+//! Client-side player setup: turns server-spawned `LogicalPlayer` entities
+//! into something playable, and provides the `RenderPlayer` camera marker.
 //!
 //! - `setup_local_player`: when the predicted local player appears, attach
-//!   bei bindings, the `InputMarker`s that lightyear's input layer reads,
-//!   and a camera + `RenderPlayer` link.
+//!   bei bindings, the `InputMarker`s lightyear's input layer reads, and a
+//!   camera + `RenderPlayer` link.
 //! - `setup_remote_player`: when an interpolated remote player appears,
 //!   attach a colored cylinder mesh so we can see them.
-//!
-//! Boot (spawning the lightyear `Client` entity + triggering `Connect`)
-//! lives in `spawn_client`/`start_client`, wired into the relevant per-mode
-//! Startup chain in `crate::game::run`.
-
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_ahoy::{CharacterLook, input::AccumulatedInput, prelude::*};
 use bevy_enhanced_input::prelude::{Hold, Press, *};
-use lightyear::prelude::client::*;
-use lightyear::prelude::input::native::{ActionState, InputMarker};
 use lightyear::prelude::*;
+use lightyear::prelude::input::native::{ActionState, InputMarker};
 
-use crate::game::{
-    bindings::PlayerInput,
-    player::{CollisionLayer, LogicalPlayer, PlayerId, RenderPlayer},
-};
+use crate::client::bindings::PlayerInput;
+use crate::kcc::{CharacterLook, input::AccumulatedInput, prelude::*};
+use crate::shared::player::{CollisionLayer, LogicalPlayer, PlayerId};
+
+/// Camera-side marker that ties a render entity (with `Camera3d`) to its
+/// authoritative [`LogicalPlayer`]. The `logical_entity` ref is written by
+/// [`setup_local_player`] and consumed by future per-player render systems.
+#[derive(Component)]
+pub struct RenderPlayer {
+    pub logical_entity: Entity,
+}
 
 #[derive(Component)]
 struct LocalPlayerInitialized;
@@ -32,9 +31,9 @@ struct LocalPlayerInitialized;
 #[derive(Component)]
 struct RemotePlayerInitialized;
 
-pub struct ClientPlugin;
+pub struct ClientPlayerPlugin;
 
-impl Plugin for ClientPlugin {
+impl Plugin for ClientPlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (setup_local_player, setup_remote_player));
     }
@@ -160,39 +159,4 @@ fn setup_remote_player(
             RemotePlayerInitialized,
         ));
     }
-}
-
-/// Spawn the `Client` entity (called at app construction time, before `Startup`).
-/// Returns the entity id so the caller can chain it.
-pub fn spawn_client(world: &mut World, client_id: u64, server_addr: SocketAddr) -> Entity {
-    let auth = Authentication::Manual {
-        server_addr,
-        client_id,
-        private_key: lightyear::netcode::Key::default(),
-        protocol_id: 0,
-    };
-    let netcode =
-        NetcodeClient::new(auth, NetcodeConfig::default()).expect("failed to build NetcodeClient");
-    world
-        .spawn((
-            Name::new("Client"),
-            Client::default(),
-            Link::new(None),
-            LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
-            PeerAddr(server_addr),
-            ReplicationReceiver::default(),
-            // Required for client-side prediction + input messages to flow back to the server.
-            // Adds InputTimelineConfig (and thus InputTimeline), LastConfirmedInput, etc.
-            PredictionManager::default(),
-            netcode,
-            UdpIo::default(),
-        ))
-        .id()
-}
-
-/// Startup system: trigger `Connect` on the unique client entity.
-pub fn start_client(mut commands: Commands, client: Single<Entity, With<Client>>) {
-    commands.trigger(Connect {
-        entity: client.into_inner(),
-    });
 }

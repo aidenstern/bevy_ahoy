@@ -1,31 +1,25 @@
-//! Server-side gameplay plugin: spawns a `LogicalPlayer` per connected client
-//! with full replication + control + prediction/interpolation targets, and
-//! adds the per-link `ReplicationSender`/`ReplicationReceiver` so input
-//! flows up and state flows down.
-//!
-//! Boot (spawning the `NetcodeServer` entity + triggering `Start`) lives in
-//! `start_server` / `boot_server` and is wired into the relevant per-mode
-//! Startup chain in `crate::game::run`.
+//! Server-side player lifecycle: per-link replication setup and authoritative
+//! `LogicalPlayer` spawn on connect.
 
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_ahoy::{CharacterLook, input::AccumulatedInput, prelude::*};
 use lightyear::prelude::input::native::ActionState;
 use lightyear::prelude::server::*;
 use lightyear::prelude::*;
 
-use crate::game::{
+use crate::kcc::{CharacterLook, input::AccumulatedInput, prelude::*};
+use crate::shared::{
     player::{CollisionLayer, LogicalPlayer, PlayerId},
     scene::SPAWN_POINT,
 };
 
 const SEND_INTERVAL: Duration = Duration::from_millis(100);
 
-pub struct ServerPlugin;
+pub struct SpawnPlugin;
 
-impl Plugin for ServerPlugin {
+impl Plugin for SpawnPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(handle_new_link)
             .add_observer(handle_connected);
@@ -70,11 +64,10 @@ fn handle_connected(
             CharacterLook::default(),
         ),
         // ActionStates: lightyear updates these on the server-side entity from
-        // the replicated client input. `lightyear_ahoy::server::ServerPlugin`
-        // then copies ActionState<AccumulatedInput> -> AccumulatedInput each
-        // FixedPreUpdate so the kcc reads the right input. Without these
-        // explicit defaults the entity has no ActionState component and the
-        // copy never runs.
+        // the replicated client input. `crate::server::networking` then copies
+        // ActionState<AccumulatedInput> -> AccumulatedInput each FixedPreUpdate
+        // so the kcc reads the right input. Without these explicit defaults the
+        // entity has no ActionState component and the copy never runs.
         (
             ActionState::<AccumulatedInput>::default(),
             ActionState::<CharacterLook>::default(),
@@ -109,24 +102,4 @@ fn peer_id_to_u64(peer: PeerId) -> u64 {
         PeerId::Netcode(id) | PeerId::Local(id) | PeerId::Steam(id) | PeerId::Entity(id) => id,
         PeerId::Raw(_) | PeerId::Server => 0,
     }
-}
-
-/// Spawn the `NetcodeServer` entity (called at app construction time, before
-/// `Startup`). Returns the entity id so the caller can chain it.
-pub fn spawn_server(world: &mut World, bind_addr: SocketAddr) -> Entity {
-    world
-        .spawn((
-            Name::new("Server"),
-            NetcodeServer::new(NetcodeConfig::default()),
-            LocalAddr(bind_addr),
-            ServerUdpIo::default(),
-        ))
-        .id()
-}
-
-/// Startup system: trigger `Start` on the unique server entity.
-pub fn start_server(mut commands: Commands, server: Single<Entity, With<Server>>) {
-    commands.trigger(Start {
-        entity: server.into_inner(),
-    });
 }

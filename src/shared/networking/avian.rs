@@ -4,7 +4,7 @@ use bevy::{
   ecs::schedule::IntoScheduleConfigs,
   transform::components::Transform,
 };
-use bevy_ahoy::AhoySystems;
+use crate::kcc::AhoySystems;
 use lightyear::{
   avian3d::plugin::AvianReplicationMode,
   frame_interpolation::{FrameInterpolationPlugin, FrameInterpolationSystems},

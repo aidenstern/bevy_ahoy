@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_ahoy::{
+use crate::kcc::{
   CharacterControllerState, CharacterLook, input::AccumulatedInput,
 };
 use lightyear::{

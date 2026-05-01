@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_ahoy::input::AccumulatedInput;
+use crate::kcc::input::AccumulatedInput;
 use lightyear::{
   input::server::InputSystems,
   prelude::input::native::{ActionState, InputMarker},

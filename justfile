@@ -21,34 +21,34 @@ run-client *args:
 # Build for Windows (cross-compile from WSL2) and run
 run-windows *args:
     cargo build --target x86_64-pc-windows-gnu
-    mkdir -p /mnt/c/tmp/bevy_ahoy/game
-    cp target/x86_64-pc-windows-gnu/debug/bevy_ahoy.exe /mnt/c/tmp/bevy_ahoy/game/
-    cp -r assets /mnt/c/tmp/bevy_ahoy/game/
-    cd /mnt/c/tmp/bevy_ahoy/game && powershell.exe -c "Start-Process 'C:\tmp\bevy_ahoy\game\bevy_ahoy.exe' {{args}}"
+    mkdir -p /mnt/c/tmp/bevy_game/game
+    cp target/x86_64-pc-windows-gnu/debug/bevy_game.exe /mnt/c/tmp/bevy_game/game/
+    cp -r assets /mnt/c/tmp/bevy_game/game/
+    cd /mnt/c/tmp/bevy_game/game && powershell.exe -c "Start-Process 'C:\tmp\bevy_game\game\bevy_game.exe' {{args}}"
 
 # Run in host-client mode on Windows
 host-windows:
     cargo build --target x86_64-pc-windows-gnu
-    mkdir -p /mnt/c/tmp/bevy_ahoy/host
-    cp target/x86_64-pc-windows-gnu/debug/bevy_ahoy.exe /mnt/c/tmp/bevy_ahoy/host/
-    cp -r assets /mnt/c/tmp/bevy_ahoy/host/
-    cd /mnt/c/tmp/bevy_ahoy/host && powershell.exe -c "Start-Process 'C:\tmp\bevy_ahoy\host\bevy_ahoy.exe'"
+    mkdir -p /mnt/c/tmp/bevy_game/host
+    cp target/x86_64-pc-windows-gnu/debug/bevy_game.exe /mnt/c/tmp/bevy_game/host/
+    cp -r assets /mnt/c/tmp/bevy_game/host/
+    cd /mnt/c/tmp/bevy_game/host && powershell.exe -c "Start-Process 'C:\tmp\bevy_game\host\bevy_game.exe'"
 
 # Run dedicated server on Windows
 server-windows *args:
     cargo build --no-default-features --features server --target x86_64-pc-windows-gnu
-    mkdir -p /mnt/c/tmp/bevy_ahoy/server
-    cp target/x86_64-pc-windows-gnu/debug/bevy_ahoy.exe /mnt/c/tmp/bevy_ahoy/server/
-    cp -r assets /mnt/c/tmp/bevy_ahoy/server/
-    cd /mnt/c/tmp/bevy_ahoy/server && powershell.exe -c "Start-Process 'C:\tmp\bevy_ahoy\server\bevy_ahoy.exe' -ArgumentList 'server {{args}}'"
+    mkdir -p /mnt/c/tmp/bevy_game/server
+    cp target/x86_64-pc-windows-gnu/debug/bevy_game.exe /mnt/c/tmp/bevy_game/server/
+    cp -r assets /mnt/c/tmp/bevy_game/server/
+    cd /mnt/c/tmp/bevy_game/server && powershell.exe -c "Start-Process 'C:\tmp\bevy_game\server\bevy_game.exe' -ArgumentList 'server {{args}}'"
 
 # Run client on Windows connecting to a server
 client-windows *args:
     cargo build --no-default-features --features client --target x86_64-pc-windows-gnu
-    mkdir -p /mnt/c/tmp/bevy_ahoy/client
-    cp target/x86_64-pc-windows-gnu/debug/bevy_ahoy.exe /mnt/c/tmp/bevy_ahoy/client/
-    cp -r assets /mnt/c/tmp/bevy_ahoy/client/
-    cd /mnt/c/tmp/bevy_ahoy/client && powershell.exe -c "Start-Process 'C:\tmp\bevy_ahoy\client\bevy_ahoy.exe' -ArgumentList 'client {{args}}'"
+    mkdir -p /mnt/c/tmp/bevy_game/client
+    cp target/x86_64-pc-windows-gnu/debug/bevy_game.exe /mnt/c/tmp/bevy_game/client/
+    cp -r assets /mnt/c/tmp/bevy_game/client/
+    cd /mnt/c/tmp/bevy_game/client && powershell.exe -c "Start-Process 'C:\tmp\bevy_game\client\bevy_game.exe' -ArgumentList 'client {{args}}'"
 
 # Build for Windows without running
 build-windows:

@@ -1,6 +1,6 @@
 use bevy_ecs::{intern::Interned, schedule::ScheduleLabel};
 
-use crate::{CharacterControllerOutput, prelude::*};
+use super::{CharacterControllerOutput, prelude::*};
 
 pub struct AhoyDynamicPlugin {
     pub schedule: Interned<dyn ScheduleLabel>,

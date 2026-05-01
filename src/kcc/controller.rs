@@ -14,7 +14,7 @@ use core::time::Duration;
 use std::sync::Arc;
 use tracing::{error, warn};
 
-use crate::{
+use super::{
     CharacterControllerDerivedProps, CharacterControllerOutput, CharacterControllerState,
     CharacterLook, MantleOutput, MantleState, input::AccumulatedInput, prelude::*,
 };

@@ -2,9 +2,9 @@ use std::{f32::consts::TAU, time::Duration};
 
 use bevy_ecs::{lifecycle::HookContext, relationship::Relationship, world::DeferredWorld};
 
-use crate::{
+use super::{
     CharacterControllerDerivedProps, CharacterControllerState, CharacterLook,
-    kcc::spin_character_look, prelude::*,
+    controller::spin_character_look, prelude::*,
 };
 
 pub struct AhoyCameraPlugin;

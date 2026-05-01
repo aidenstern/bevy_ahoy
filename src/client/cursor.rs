@@ -6,7 +6,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 
-use crate::game::GameState;
+use crate::GameState;
 
 pub struct CursorPlugin;
 

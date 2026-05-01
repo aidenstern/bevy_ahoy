@@ -1,10 +1,11 @@
 //! Water gameplay was removed during the server-authoritative migration prep.
 //!
-//! These types are kept as inert markers because [`crate::kcc`] still references
-//! [`WaterState`] and [`Water`] in its queries; nothing populates [`WaterState`]
-//! anymore, so all water-aware code paths in the kcc are dead at runtime.
+//! These types are kept as inert markers because [`super::controller`] still
+//! references [`WaterState`] and [`Water`] in its queries; nothing populates
+//! [`WaterState`] anymore, so all water-aware code paths in the kcc are dead
+//! at runtime.
 
-use crate::prelude::*;
+use super::prelude::*;
 
 #[derive(Component, Default, Copy, Reflect, PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]

@@ -1,11 +1,11 @@
 use bevy_ecs::entity::MapEntities;
 use bevy_time::Stopwatch;
 
-use crate::CharacterControllerState;
-use crate::kcc::{forward, right};
-use crate::prelude::*;
+use super::CharacterControllerState;
+use super::controller::{forward, right};
+use super::prelude::*;
 
-use crate::fixed_update_utils::did_fixed_timestep_run_this_frame;
+use super::fixed_update_utils::did_fixed_timestep_run_this_frame;
 
 pub struct AhoyInputPlugin;
 

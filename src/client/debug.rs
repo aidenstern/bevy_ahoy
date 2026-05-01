@@ -5,10 +5,11 @@
 
 use avian3d::prelude::*;
 use bevy::{platform::collections::HashSet, prelude::*};
-use bevy_ahoy::{CharacterControllerOutput, prelude::*};
+use crate::kcc::{CharacterControllerOutput, prelude::*};
 use bevy_enhanced_input::prelude::{Release, *};
 
-use crate::game::{GameState, player::LogicalPlayer, scene::SPAWN_POINT};
+use crate::GameState;
+use crate::shared::{player::LogicalPlayer, scene::SPAWN_POINT};
 
 pub struct DebugPlugin;
 

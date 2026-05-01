@@ -11,7 +11,7 @@ use bevy::{
 use bevy_mod_mipmap_generator::generate_mipmaps;
 use core::f32::consts::TAU;
 
-use crate::game::GameState;
+use crate::GameState;
 
 pub struct VisualsPlugin;
 

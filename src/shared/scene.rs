@@ -1,9 +1,15 @@
-//! Map loading + collider hydration.
+//! Map loading and shared collider hydration.
+//!
+//! Both client and server load the playground glb and add colliders to its
+//! mesh hierarchy — the predicted client needs colliders for prediction, and
+//! the authoritative server needs them for the real simulation. Future work
+//! could replicate collider state instead of running the constructor twice;
+//! see `notes/networking-plan.md`.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::game::GameState;
+use crate::GameState;
 
 pub const SPAWN_POINT: Vec3 = Vec3::new(0.0, 20.0, 0.0);
 

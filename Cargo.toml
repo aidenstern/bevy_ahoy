@@ -1,23 +1,21 @@
 [package]
-name = "bevy_ahoy"
-authors = ["Jan Hohenheim <jan@hohenheim.ch>"]
-version = "0.1.0-rc.6"
+name = "bevy_game"
+version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0 "
-description = "A fun 3D Kinematic Character Controller for Bevy + Avian + BEI."
+license = "MIT OR Apache-2.0"
+authors = ["Aiden Stern <aiden.stern@gmail.com>"]
+description = "Server-authoritative multiplayer Bevy game with a Source-style first-person KCC."
 readme = "readme.md"
-repository = "https://github.com/janhohenheim/bevy_ahoy"
-keywords = ["kcc", "character", "controller", "source", "quake"]
-categories = ["game-development"]
-include = ["/src", "/assets", "/license*"]
+publish = false
 
 [features]
 default = ["client", "server"]
-client = ["serialize"]
-server = ["serialize"]
+client = ["dep:lightyear", "serialize"]
+server = ["dep:lightyear", "serialize"]
 serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]
 
 [dependencies]
+# kcc deps (modular bevy crates so the kcc module stays self-contained)
 avian3d = { version = "0.6.1", default-features = false, features = ["parry-f32", "3d", "f32", "collider-from-mesh"] }
 bevy_ecs = { version = "0.18", default-features = false }
 bevy_app = { version = "0.18", default-features = false }
@@ -31,12 +29,13 @@ bevy_enhanced_input = { version = "0.24", default-features = false }
 tracing = { version = "0.1", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
+# game deps
 bevy = { version = "0.18", features = ["track_location", "file_watcher"] }
 bevy_mod_mipmap_generator = { version = "0.1.0", git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 bevy_framepace = { version = "0.21.0", git = "https://github.com/aevyrie/bevy_framepace" }
 clap = { version = "4", features = ["derive"] }
 
-lightyear = { git = "https://github.com/cBournhonesque/lightyear.git", branch = "main", features = [
+lightyear = { git = "https://github.com/cBournhonesque/lightyear.git", branch = "main", optional = true, features = [
     "avian3d",
     "frame_interpolation",
     "interpolation",
@@ -52,9 +51,6 @@ lightyear = { git = "https://github.com/cBournhonesque/lightyear.git", branch = 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
-[package.metadata.bevy_cli.unstable]
-#web-multi-threading = true
-
 [profile.dev]
 opt-level = 1
 debug = 1
@@ -63,7 +59,6 @@ debug = 1
 opt-level = 3
 
 [lints.rust]
-# missing_docs = "warn"
 unused_qualifications = "warn"
 
 [lints.clippy]
@@ -85,7 +80,3 @@ ref_as_ptr = "warn"
 too_long_first_doc_paragraph = "allow"
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
-
-[package.metadata.docs.rs]
-rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
-all-features = true

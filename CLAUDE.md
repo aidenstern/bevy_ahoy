@@ -4,13 +4,15 @@ Guidance for Claude Code working in this repo.
 
 ## Project Overview
 
-`bevy_ahoy` started as janhohenheim's first-person Kinematic Character Controller library for Bevy 0.18 + Avian 0.6 + bevy_enhanced_input 0.24. This fork has been evolved into a server-authoritative multiplayer game using lightyear (`baszalmstra/lightyear` @ rev `9f90deca6`).
+`bevy_game` is a server-authoritative multiplayer Bevy game built on lightyear
+(`cBournhonesque/lightyear` branch `main`). The kinematic character controller
+under `src/kcc/` is forked from
+[`janhohenheim/bevy_ahoy`](https://github.com/janhohenheim/bevy_ahoy) and evolved
+in place; we don't pretend to be a fork of that crate any more — the kcc is just
+an internal module of the game now.
 
-The repo is **both a library and a game binary** in one Cargo package:
-- `src/lib.rs` + `src/{camera,kcc,input,dynamics,fixed_update_utils,water}.rs` — the kcc library (still publishable as `bevy_ahoy`).
-- `src/main.rs` — three-line binary entry point.
-- `src/game/` — the game built on top of the library (CLI, scene, player components, debug HUD, visuals).
-- `src/game/networking/` — vendored `lightyear_ahoy` glue: avian replication, protocol, client/server input plumbing.
+It's a single Cargo package (`bevy_game`) with a single binary entry point.
+Internally the layout follows a foxtrot-style domain split.
 
 ## Run modes
 
@@ -25,58 +27,102 @@ just run-client 1       # cargo run --no-default-features --features client -- c
 ## Cargo features
 
 - `default = ["client", "server"]` → host-client mode.
-- `client = ["serialize"]` — gates client-mode game code (`src/game/client.rs`, `host.rs`).
-- `server = ["serialize"]` — gates server-mode game code (`src/game/server.rs`, `host.rs`).
-- `serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]` — enables `Serialize`/`Deserialize` derives on the lib's components so they can be replicated.
+- `client = ["dep:lightyear", "serialize"]` — gates `src/client/`. Pulls in lightyear.
+- `server = ["dep:lightyear", "serialize"]` — gates `src/server/`. Pulls in lightyear.
+- `serialize = ["dep:serde", "avian3d/serialize", "bevy_math/serialize"]` — turns on
+  `Serialize`/`Deserialize` derives on replicated kcc components.
 
-`cargo check --no-default-features` (zero features) intentionally fails with a `compile_error!` in `src/game/mod.rs` — at least one of `client`/`server` must be on.
+`cargo check --no-default-features` (zero features) intentionally fails with a
+`compile_error!` in `src/lib.rs` — at least one of `client`/`server` must be on.
+With both features off, lightyear is also off — the build is just the kcc + scene
++ shared protocol registration.
 
 ## Module layout
 
-### Library (`src/`, in the `bevy_ahoy` lib crate)
-- `lib.rs` — `AhoyPlugins` plugin group, `AhoySystems` (`MoveCharacters` / `ApplyForcesToDynamicRigidBodies` / `UpdateCameras`), `CharacterController` (knobs), `CharacterLook` (yaw/pitch), `CharacterControllerState`, `CharacterControllerOutput`, `CharacterControllerDerivedProps`, prelude.
-- `camera.rs` — `CharacterControllerCameraOf` relationship for first-person camera follow. The camera transform is the **only** writer of yaw input (`rotate_camera`/`yank_camera`); `copy_camera_to_character_look` (in `RunFixedMainLoop`) pulls camera yaw into `CharacterLook`. The reverse path (`copy_character_look_to_camera`) and `sync_camera_transform` run in `PostUpdate` under `AhoySystems::UpdateCameras`, which `lightyear_ahoy::avian::SimpleAvianSetupPlugin` chains *after* `RollbackSystems::VisualCorrection` and `FrameInterpolationSystems::Interpolate`.
-- `input.rs` — bei `InputAction` types (`Movement`, `Jump`, `RotateCamera`, `Crouch`, `Mantle`, `Tac`, `Crane`, `Climbdown`, `SwimUp`, `YankCamera`) + `AccumulatedInput` (replicated as input via lightyear) + `apply_*` Fire observers.
-- `kcc.rs` — the kcc move-and-slide implementation. `spin_character_look` rotates `CharacterLook` (not the kcc `Transform`) when standing on a spinning platform.
-- `dynamics.rs` — applies impulses to dynamic rigid bodies the controller touches.
-- `water.rs` — **inert** type defs (water gameplay was removed; types kept because kcc.rs queries them — never populated at runtime).
+```
+src/
+├── main.rs                   # tiny entry: calls bevy_game::run()
+├── lib.rs                    # pub fn run(); declares all modules; defines GameState
+├── kcc/                      # the KCC (forked from janhohenheim/bevy_ahoy)
+│   ├── mod.rs                # AhoyPlugins, AhoySystems, CharacterController, prelude
+│   ├── controller.rs         # move-and-slide impl
+│   ├── camera.rs             # CharacterControllerCameraOf
+│   ├── input.rs              # bei InputAction types + AccumulatedInput
+│   ├── dynamics.rs           # impulses to dynamic rigid bodies
+│   ├── water.rs              # inert types kept for kcc internal queries
+│   └── fixed_update_utils.rs # schedule helpers
+├── shared/                   # always compiles
+│   ├── mod.rs
+│   ├── cli.rs                # clap CLI; Mode variants cfg-gated per side
+│   ├── player.rs             # LogicalPlayer, PlayerId, CollisionLayer + PlayerPlugin
+│   ├── scene.rs              # SPAWN_POINT, MapRoot, load_map, add_map_colliders
+│   └── networking/
+│       ├── mod.rs
+│       ├── protocol.rs       # ProtocolPlugin (component registration for replication)
+│       └── avian.rs          # SimpleAvianSetupPlugin (avian replication setup)
+├── client/                   # #[cfg(feature = "client")]
+│   ├── mod.rs                # ClientPlugin (aggregates) + pub use boot::*
+│   ├── boot.rs               # spawn_client, start_client
+│   ├── player.rs             # RenderPlayer + setup_local_player + setup_remote_player
+│   ├── bindings.rs           # bei PlayerInput context
+│   ├── cursor.rs             # mouse capture
+│   ├── debug.rs              # debug HUD + reset/toggle inputs
+│   ├── debug_net.rs          # ClientNetworkDebugPlugin (periodic state log)
+│   ├── networking.rs         # client-side input replication into ActionState
+│   └── visuals.rs            # atmosphere, bloom, env maps, crosshair
+├── server/                   # #[cfg(feature = "server")]
+│   ├── mod.rs                # ServerPlugin (aggregates) + pub use boot::*
+│   ├── boot.rs               # spawn_server, start_server
+│   ├── spawn.rs              # handle_new_link, handle_connected
+│   ├── respawn.rs            # respawn_below_floor (server-authoritative)
+│   ├── debug_net.rs          # ServerNetworkDebugPlugin
+│   └── networking.rs         # server-side input plumbing (ActionState → AccumulatedInput)
+└── host/                     # #[cfg(all(feature = "client", feature = "server"))]
+    └── mod.rs                # HostPlugin: in-process server + client link
+```
 
-### Game (`src/game/`, in the binary)
-- `mod.rs` — `pub fn run() -> AppExit`. Builds the `App`, parses CLI, adds Bevy `DefaultPlugins`, Avian (`PhysicsPlugins` with `PhysicsTransformPlugin`/`PhysicsInterpolationPlugin` disabled — lightyear's avian glue replaces them), `lightyear::prelude::client::ClientPlugins` and/or `lightyear::prelude::server::ServerPlugins`, the four `networking::*` plugins, `AhoyPlugins`, visual + input plugins, then dispatches per-mode boot.
-- `cli.rs` — clap CLI: `Server { bind_addr }` / `Client { client_id, server_addr }` subcommands, host-client when no subcommand.
-- `scene.rs` — `playground.glb` load, `add_map_colliders` (waits for meshes loaded → adds `ColliderConstructorHierarchy`), `SPAWN_POINT`.
-- `player.rs` — `LogicalPlayer` (replicated marker), `PlayerId(u64)` (replicated stable id), `RenderPlayer { logical_entity }` (client-side camera→logical link), `CollisionLayer`, `respawn_below_floor` (Y < -50 → SPAWN_POINT).
-- `bindings.rs` — `BindingsPlugin` (registers the bei `PlayerInput` context). The `actions!` invocation lives in `client::setup_local_player` — the server never touches bei.
-- `debug.rs` — `DebugInput` bei context, `Reset`/`ToggleDebug` actions, debug HUD text.
-- `cursor.rs` — click to capture / Esc to release.
-- `visuals.rs` — `tweak_camera`/`tweak_directional_light` observers (Atmosphere, Bloom, EnvMap, sun rotation), mipmap gen, material roughness, crosshair UI.
-- `server.rs` — `ServerPlugin`: `handle_new_link` adds `ReplicationSender`/`ReplicationReceiver` per client; `handle_connected` spawns `LogicalPlayer` + physics bundle + `Replicate::to_clients(All)` + `PredictionTarget::Single(client)` + `InterpolationTarget::AllExceptSingle(client)` + `ControlledBy { owner: linkof_entity }`. Also `spawn_server`/`start_server` for boot.
-- `client.rs` — `ClientPlugin`: `setup_local_player` (filter `(Added<Predicted>, With<LogicalPlayer>, Has<Controlled>)` → attach `CharacterController`/`Collider`/`RigidBody` for prediction + bei `actions!` + `InputMarker<AccumulatedInput>`/`InputMarker<CharacterLook>` + camera + `RenderPlayer`); `setup_remote_player` (interpolated remotes get a colored cylinder mesh). Also `spawn_client`/`start_client` for boot.
-- `host.rs` — `HostPlugin`: spawns the server entity at app construction time, plus a `Client` with `LinkOf { server }` (no UDP — shares process link). `Startup` chain: `(start_server, start_client)`.
-
-### Networking (`src/game/networking/`, vendored from `lightyear_ahoy`)
-- `avian.rs` — `SimpleAvianSetupPlugin`: registers `Position`/`Rotation`/`LinearVelocity`/`AngularVelocity` for prediction with rollback thresholds, correction, and visual interpolation. Adds `lightyear::avian3d::LightyearAvianPlugin` + `FrameInterpolationPlugin::<Transform>`. Configures the `PostUpdate` chain so visual correction + frame interpolation happen before `AhoySystems::UpdateCameras`.
-- `protocol.rs` — `ProtocolPlugin`: registers `InputPlugin::<AccumulatedInput>` and `InputPlugin::<CharacterLook>` (lightyear's native input replication); registers `CharacterLook` and `CharacterControllerState` for prediction (the latter with `add_component_map_entities` because of its `grounded.entity` ref + a `should_rollback` that compares scalars only — the entity is left as advisory).
-- `client.rs` — `ClientPlugin`: copies local `AccumulatedInput`/`CharacterLook` into `ActionState` for the local-input entity (`InputMarker<…>`-tagged) so they replicate to the server; on rollback, copies `ActionState` back into `AccumulatedInput`/`CharacterLook` for re-simulation. Includes a workaround observer (`copy_interpolated_confirmed_to_real`) for [lightyear#1380](https://github.com/cBournhonesque/lightyear/issues/1380).
-- `server.rs` — `ServerPlugin`: copies received `ActionState<AccumulatedInput>` into `AccumulatedInput` for remote-controlled entities (entities without `InputMarker`).
+`crate::GameState` lives at the top of `src/lib.rs`.
 
 ## How replication actually works
 
-1. **Player connects** — server's `handle_new_link` adds `ReplicationSender`+`ReplicationReceiver` to the new `LinkOf` entity. `handle_connected` then spawns a `LogicalPlayer` with full replication targets and a `ControlledBy { owner: linkof_entity }`.
-2. **Server → client** — `Replicate::to_clients(All)` pushes Position/Rotation/LinearVelocity/AngularVelocity/CharacterLook/CharacterControllerState to all clients. The owning client gets a `Predicted` copy; everyone else gets an `Interpolated` copy.
-3. **Local player setup (client)** — `Added<Predicted> + With<LogicalPlayer> + Has<Controlled>` triggers `setup_local_player`, which attaches the local-only physics bundle, bei bindings, and `InputMarker<AccumulatedInput>`/`InputMarker<CharacterLook>`.
-4. **Local input collection** — bei observers in `lib/src/input.rs` fill `AccumulatedInput`. The client also writes `CharacterLook` from camera mouse input.
-5. **Client → server (input)** — `lightyear_ahoy::client::ClientPlugin` copies `AccumulatedInput → ActionState<AccumulatedInput>` (and same for `CharacterLook`). Lightyear's input plugin replicates these `ActionState`s up to the server.
-6. **Server runs the kcc** — `lightyear_ahoy::server::ServerPlugin` copies the received `ActionState → AccumulatedInput` for each remote player; the server's `AhoyKccPlugin` simulates against that input. The kcc reads `CharacterLook` to set `CharacterControllerState.orientation`.
-7. **Client predicts locally** — the predicted local player runs the same kcc against its local `AccumulatedInput`. Replicated state from the server triggers rollback when prediction diverges (per `position_should_rollback` etc.), with `character_controller_state_should_rollback` ignoring the `grounded.entity` field (entity refs differ between server and client).
+1. **Player connects** — the server's `handle_new_link` (in `src/server/spawn.rs`) adds
+   `ReplicationSender`+`ReplicationReceiver` to the new `LinkOf` entity.
+   `handle_connected` then spawns a `LogicalPlayer` with replication targets and a
+   `ControlledBy { owner: linkof_entity }`.
+2. **Server → client** — `Replicate::to_clients(All)` pushes
+   Position/Rotation/LinearVelocity/AngularVelocity/CharacterLook/CharacterControllerState
+   to all clients. The owning client gets a `Predicted` copy; everyone else gets an
+   `Interpolated` copy.
+3. **Local player setup (client)** — `Added<Predicted> + With<LogicalPlayer>`
+   triggers `setup_local_player` (in `src/client/player.rs`), which attaches the
+   local-only physics bundle, bei bindings, and `InputMarker<AccumulatedInput>` /
+   `InputMarker<CharacterLook>`.
+4. **Local input collection** — bei observers in `src/kcc/input.rs` fill
+   `AccumulatedInput`. The client also writes `CharacterLook` from camera mouse
+   input.
+5. **Client → server (input)** — `src/client/networking.rs` copies
+   `AccumulatedInput → ActionState<AccumulatedInput>` (and same for `CharacterLook`).
+   Lightyear's input plugin replicates these `ActionState`s up to the server.
+6. **Server runs the kcc** — `src/server/networking.rs` copies the received
+   `ActionState → AccumulatedInput` for each remote player; the server's
+   `AhoyKccPlugin` simulates against that input. The kcc reads `CharacterLook` to
+   set `CharacterControllerState.orientation`.
+7. **Client predicts locally** — the predicted local player runs the same kcc
+   against its local `AccumulatedInput`. Replicated state from the server triggers
+   rollback when prediction diverges (per `position_should_rollback` etc.), with
+   `character_controller_state_should_rollback` ignoring the `grounded.entity`
+   field (entity refs differ between server and client).
 
 ## Schedule
 
 - bei `Update` runs in `PreUpdate`, fires `Fire<Action>` events.
-- `apply_*` observers (in `lib/src/input.rs`) write into `AccumulatedInput`.
+- `apply_*` observers (in `src/kcc/input.rs`) write into `AccumulatedInput`.
 - `AhoyKccPlugin` runs the kcc move-and-slide in `FixedPostUpdate`.
 - `clear_accumulated_input` runs after each `FixedMainLoop` to reset.
-- Camera transform sync (`sync_camera_transform`, `copy_character_look_to_camera`) runs in `PostUpdate` inside `AhoySystems::UpdateCameras`, **after** `FrameInterpolationSystems::Interpolate` (so the camera follows the interpolated transform).
+- Camera transform sync (`sync_camera_transform`, `copy_character_look_to_camera`)
+  runs in `PostUpdate` inside `AhoySystems::UpdateCameras`, **after**
+  `FrameInterpolationSystems::Interpolate` (so the camera follows the interpolated
+  transform).
 
 ## Common commands
 
@@ -91,11 +137,35 @@ just lint                            # clippy with -D warnings
 
 ## What's done vs what's next
 
-**Networking (done)**: full server-authoritative POC. Server-side player spawn, replicated state (Position/Rotation/Velocity/Look/State), input replication via lightyear's native `InputPlugin<AccumulatedInput>` + `InputPlugin<CharacterLook>`, predicted local player + interpolated remotes, host-client mode, dedicated server, dedicated client.
+**Networking (done)**: full server-authoritative POC. Server-side player spawn,
+replicated state (Position/Rotation/Velocity/Look/State), input replication via
+lightyear's native `InputPlugin<AccumulatedInput>` + `InputPlugin<CharacterLook>`,
+predicted local player + interpolated remotes, host-client mode, dedicated
+server, dedicated client.
+
+**Foxtrot-style restructure (done)**: collapsed the kcc out of a separately-named
+lib into `src/kcc/`, moved game code into `src/{shared,client,server,host}/`,
+tightened the per-side cfg discipline (each side's plugins, modules, and even
+imports are gated), renamed the package to `bevy_game`, dropped the fork-style
+metadata, made lightyear an optional dep that the `client`/`server` features pull
+in.
 
 **Future polish**:
-- Multi-client visual verification (run two clients against a dedicated server and confirm both render the other's cylinder).
-- Headless server: drop `DefaultPlugins` for `MinimalPlugins` + asset/mesh/scene/gltf in `src/game/mod.rs` for the `Server` mode branch.
-- Better `PlayerId` derivation (currently grabs the inner u64 from `PeerId::Netcode`/`Local`/`Steam`/`Entity`; non-netcode connections fall back to 0).
+- Multi-client visual verification (run two clients against a dedicated server and
+  confirm both render the other's cylinder).
+- Headless server: drop `DefaultPlugins` for `MinimalPlugins` + asset/mesh/scene/gltf
+  in `src/lib.rs`'s `Server` mode branch.
+- Better `PlayerId` derivation (currently grabs the inner u64 from `PeerId`'s
+  `Netcode`/`Local`/`Steam`/`Entity` variants; non-netcode connections fall back
+  to 0).
 - Tune `InputDelayConfig` / send interval for production network conditions.
-- The "ground entity" desync caveat: when client and server pick different ground entities, `character_controller_state_should_rollback` ignores the divergence — visually fine, but a re-run on the client picks up the wrong ground reference for one tick. Optionally: recompute the ground entity at rollback time (see `notes/networking-plan.md` §"Open questions").
+- The "ground entity" desync caveat: when client and server pick different ground
+  entities, `character_controller_state_should_rollback` ignores the divergence —
+  visually fine, but a re-run on the client picks up the wrong ground reference
+  for one tick. Optionally: recompute the ground entity at rollback time (see
+  `notes/networking-plan.md` §"Open questions").
+- Both client and server independently run `ColliderConstructorHierarchy` on the
+  loaded glb. Functionally fine (predicted client needs colliders); future work
+  could replicate collider state instead.
+- Consider renaming the `Ahoy*` types (`AhoyPlugins`, `AhoySystems`, `AhoyKccPlugin`,
+  etc.) to something neutral now that the kcc is no longer a fork-with-the-same-name.

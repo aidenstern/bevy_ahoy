@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_ahoy::{AhoySystems, CharacterLook, input::AccumulatedInput};
+use crate::kcc::{AhoySystems, CharacterLook, input::AccumulatedInput};
 use lightyear::{
   frame_interpolation::FrameInterpolationSystems,
   input::client::InputSystems,
