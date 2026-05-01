@@ -4241,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "lightyear"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "bevy_app",
@@ -4284,7 +4284,7 @@ dependencies = [
 [[package]]
 name = "lightyear_aeronet"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "bevy_app",
@@ -4298,7 +4298,7 @@ dependencies = [
 [[package]]
 name = "lightyear_avian2d"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "avian2d",
  "bevy_app",
@@ -4319,7 +4319,7 @@ dependencies = [
 [[package]]
 name = "lightyear_avian3d"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "avian3d",
  "bevy_app",
@@ -4340,7 +4340,7 @@ dependencies = [
 [[package]]
 name = "lightyear_connection"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4359,7 +4359,7 @@ dependencies = [
 [[package]]
 name = "lightyear_core"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4378,7 +4378,7 @@ dependencies = [
 [[package]]
 name = "lightyear_frame_interpolation"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4397,7 +4397,7 @@ dependencies = [
 [[package]]
 name = "lightyear_inputs"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4420,7 +4420,7 @@ dependencies = [
 [[package]]
 name = "lightyear_inputs_bei"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4441,7 +4441,7 @@ dependencies = [
 [[package]]
 name = "lightyear_inputs_leafwing"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4461,7 +4461,7 @@ dependencies = [
 [[package]]
 name = "lightyear_inputs_native"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4476,7 +4476,7 @@ dependencies = [
 [[package]]
 name = "lightyear_interpolation"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4500,7 +4500,7 @@ dependencies = [
 [[package]]
 name = "lightyear_link"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4516,7 +4516,7 @@ dependencies = [
 [[package]]
 name = "lightyear_messages"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4537,7 +4537,7 @@ dependencies = [
 [[package]]
 name = "lightyear_metrics"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_color",
@@ -4556,7 +4556,7 @@ dependencies = [
 [[package]]
 name = "lightyear_netcode"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "bevy_app",
@@ -4581,7 +4581,7 @@ dependencies = [
 [[package]]
 name = "lightyear_prediction"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4609,7 +4609,7 @@ dependencies = [
 [[package]]
 name = "lightyear_raw_connection"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "bevy_app",
@@ -4624,7 +4624,7 @@ dependencies = [
 [[package]]
 name = "lightyear_replication"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "avian2d",
  "avian3d",
@@ -4659,7 +4659,7 @@ dependencies = [
 [[package]]
 name = "lightyear_serde"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_derive",
  "bevy_ecs",
@@ -4679,7 +4679,7 @@ dependencies = [
 [[package]]
 name = "lightyear_steam"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "aeronet_steam",
@@ -4696,7 +4696,7 @@ dependencies = [
 [[package]]
 name = "lightyear_sync"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_derive",
@@ -4719,7 +4719,7 @@ dependencies = [
 [[package]]
 name = "lightyear_transport"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4747,7 +4747,7 @@ dependencies = [
 [[package]]
 name = "lightyear_udp"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "bevy_app",
@@ -4763,7 +4763,7 @@ dependencies = [
 [[package]]
 name = "lightyear_ui"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_color",
@@ -4783,7 +4783,7 @@ dependencies = [
 [[package]]
 name = "lightyear_utils"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_ecs",
  "bevy_platform",
@@ -4798,7 +4798,7 @@ dependencies = [
 [[package]]
 name = "lightyear_web"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4810,7 +4810,7 @@ dependencies = [
 [[package]]
 name = "lightyear_websocket"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "aeronet_websocket",
@@ -4826,7 +4826,7 @@ dependencies = [
 [[package]]
 name = "lightyear_webtransport"
 version = "0.26.4"
-source = "git+https://github.com/baszalmstra/lightyear.git?rev=9f90deca6a23e7c98028d14c98f0961e4135902d#9f90deca6a23e7c98028d14c98f0961e4135902d"
+source = "git+https://github.com/cBournhonesque/lightyear.git?branch=main#013c51fae9025a908ba22e35324ae76acaf22d23"
 dependencies = [
  "aeronet_io",
  "aeronet_webtransport",

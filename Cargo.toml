@@ -36,7 +36,7 @@ bevy_mod_mipmap_generator = { version = "0.1.0", git = "https://github.com/DGrif
 bevy_framepace = { version = "0.21.0", git = "https://github.com/aevyrie/bevy_framepace" }
 clap = { version = "4", features = ["derive"] }
 
-lightyear = { git = "https://github.com/baszalmstra/lightyear.git", rev = "9f90deca6a23e7c98028d14c98f0961e4135902d", features = [
+lightyear = { git = "https://github.com/cBournhonesque/lightyear.git", branch = "main", features = [
     "avian3d",
     "frame_interpolation",
     "interpolation",
